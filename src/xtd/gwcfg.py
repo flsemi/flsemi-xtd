@@ -213,7 +213,8 @@ def command(dev: str, op: int, cmd_id: int, payload: dict, timeout: float = 3.0)
 # mcumgr mgmt error codes, so a refusal reads as a reason and not a number
 SMP_ERR = {1: "EUNKNOWN: the gateway refused it (see its shell log)", 2: "ENOMEM",
            3: "EINVAL: bad or unsupported value for this build", 4: "ETIMEOUT",
-           5: "ENOENT", 6: "EBADSTATE", 7: "EMSGSIZE", 8: "ENOTSUP", 9: "ECORRUPT",
+           5: "ENOENT", 6: "EBADSTATE: not possible in the gateway's current state",
+           7: "EMSGSIZE", 8: "ENOTSUP: reserved id, nothing served", 9: "ECORRUPT",
            10: "EBUSY"}
 
 
@@ -811,8 +812,14 @@ def main():
             slots = img_upload(dev, blob, args.chunk, _progress_stderr)
             sys.stderr.write(f"\ndone in {time.time() - t0:.0f} s\n")
             show(slots)
+            new = [sl for sl in slots if sl["slot"] == 1]
+            run = [sl for sl in slots if sl["slot"] == 0]
+            if new and run and new[0]["hash"] == run[0]["hash"]:
+                # MCUboot would skip the swap anyway; say so rather than
+                # let "marked for test boot" imply a change that never comes
+                print("same image as the one running; nothing to swap")
+                args.test = args.reset = False
             if args.test:
-                new = [sl for sl in slots if sl["slot"] == 1]
                 if not new:
                     sys.exit("no image in slot 1 after the upload")
                 show(img_test(dev, new[0]["hash"]))

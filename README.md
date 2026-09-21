@@ -61,11 +61,12 @@ Run against two BFi91XTD kits on the bench (gateway firmware 0.6.2, stack Rev 1.
 
 Things the interface does not do, by design of the firmware rather than of this tool:
 
-- `wifi` reads back the **connected** SSID, not the stored one. On a gateway that is not associated the SSID reads empty, and `profile dump` therefore cannot carry Wi-Fi credentials — supply `--psk` (and the SSID) to `restore` by hand.
-- `scan` needs Wi-Fi enabled with credentials; with the radio down the gateway answers `EUNKNOWN`.
-- `geo` cannot be returned to "not set": the nRF9151 marks the record written on any write. Positions can be changed, not forgotten.
+- The Wi-Fi PSK is write-only. `profile dump` carries the stored SSID (`cfg_ssid`, gateway 0.6.2 build 2026-09-21 or later; older builds only report the connected one) but a `restore` needs `--psk` typed in.
+- `scan` on a gateway with no credentials brings the interface up for the survey and takes it down again afterwards (same build); older builds answer `EUNKNOWN` unless Wi-Fi is up.
+- `geo` cannot yet be returned to "not set" through this interface: the stack (Rev 1.516) erases the record on a META write of 0, and the gateway's clear path for it is pending.
 - `ip --static/--dhcp` answers `EINVAL` on the shipped image, which is IPv6-only (`ip` reports `ipv4_supported: false`).
-- Group 64 ids 4, 6 and 10 (DECT_STARTUP, DECT_SHELL, AUDIO_CFG) are named in the firmware but not served; there is nothing to call.
+- Group 64 ids 4, 6 and 10 are reserved (`ENOTSUP`); there is nothing to call.
+- `dfu` with the image already running reports "same image as the one running; nothing to swap" instead of a test boot.
 
 ## What it talks to
 

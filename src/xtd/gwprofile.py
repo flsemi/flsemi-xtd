@@ -44,7 +44,8 @@ from . import gwcfg as G  # noqa: E402
 SUBSYS = {
     "wifi":  dict(id=G.ID_WIFI_CFG,  set=["ssid", "sec", "band", "enabled"],
                   secret=["psk"],
-                  ro=["state", "rssi", "channel", "ip4", "ip6", "mask4", "gw4"]),
+                  ro=["state", "rssi", "channel", "ip4", "ip6", "mask4", "gw4",
+                      "cfg_ssid"]),
     "ip":    dict(id=G.ID_WIFI_IP,   set=["mode", "family", "addr", "mask", "gw"],
                   secret=[], ro=[]),
     "adv":   dict(id=G.ID_WIFI_ADV,  set=["ps", "reg"], secret=[], ro=[]),
@@ -106,6 +107,11 @@ def read_all(dev, quiet=False):
                 print("  %-6s unreadable: %s" % (name, e), file=sys.stderr)
             continue
         out[name] = {k: r[k] for k in spec["set"] if k in r}
+        # Gateway 0.6.2+ reports the STORED SSID as cfg_ssid; `ssid` is the
+        # live association's and reads empty on a gateway that is not
+        # connected. A dump carries the stored one when it is offered.
+        if name == "wifi" and "cfg_ssid" in r:
+            out[name]["ssid"] = r["cfg_ssid"]
         for k in spec["secret"]:
             out[name][k] = None
         status[name] = {k: r[k] for k in r if k not in spec["set"]
