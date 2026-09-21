@@ -349,12 +349,15 @@ def main():
     scan = sub.add_parser("scan")
     scan.add_argument("--wait", type=int, default=8,
                       help="seconds to wait before fetching results")
-    ip = sub.add_parser("ip")
-    ip.add_argument("--dhcp", action="store_true")
-    ip.add_argument("--static", metavar="ADDR", default=None)
+    ip = sub.add_parser("ip", help="Wi-Fi address family. The kit is IPv6-only: the gateway "
+                        "takes its address from router advertisements and the IPv4 options "
+                        "below are refused unless a build reports ipv4_supported")
+    ip.add_argument("--dhcp", action="store_true", help="IPv4 DHCP (needs an IPv4 build)")
+    ip.add_argument("--static", metavar="ADDR", default=None, help="static IPv4 address (needs an IPv4 build)")
     ip.add_argument("--mask", default="255.255.255.0")
     ip.add_argument("--gw", default="")
-    ip.add_argument("--family", choices=["dual", "v4", "v6"], default="dual")
+    ip.add_argument("--family", choices=["dual", "v4", "v6"], default=None,
+                    help="v6 is what the shipped image runs; dual/v4 need an IPv4 build")
     adv = sub.add_parser("adv")
     adv.add_argument("--ps", choices=["on", "off"], default=None)
     adv.add_argument("--reg", default=None, help="country code, e.g. TW")
@@ -935,16 +938,21 @@ def main():
         if rsp.get("scanning"):
             print("(scan still running -- rerun with a longer --wait)")
     elif args.cmd == "ip":
-        fam = {"dual": 0, "v4": 1, "v6": 2}[args.family]
+        cur = command(dev, OP_READ, ID_WIFI_IP, {})
+        wants_v4 = args.static or args.dhcp or args.family in ("dual", "v4")
+        if wants_v4 and not cur.get("ipv4_supported", False):
+            sys.exit("xtd cfg ip: this gateway is IPv6-only (ipv4_supported: false); "
+                     "IPv4 addressing, DHCP and dual/v4 families are not available on it")
+        fam = {"dual": 0, "v4": 1, "v6": 2}[args.family or "v6"]
         if args.static:
             print(command(dev, OP_WRITE, ID_WIFI_IP,
                           {"mode": 1, "family": fam, "addr": args.static,
                            "mask": args.mask, "gw": args.gw}))
-        elif args.dhcp or args.family != "dual":
+        elif args.dhcp or args.family is not None:
             print(command(dev, OP_WRITE, ID_WIFI_IP,
                           {"mode": 0, "family": fam}))
         else:
-            print(command(dev, OP_READ, ID_WIFI_IP, {}))
+            print(cur)
     elif args.cmd == "adv":
         if args.ps is None and args.reg is None:
             print(command(dev, OP_READ, ID_WIFI_ADV, {}))
