@@ -70,7 +70,7 @@ SUBSYS = {
     "sec":   dict(id=G.ID_DECT_SEC,  set=["require"], secret=["key"],
                   ro=["profile_has_key", "known", "link"]),
     "dect":  dict(id=G.ID_DECT,      set=["network", "carrier", "nw_carrier",
-                                          "sink", "autostart", "hop"],
+                                          "sink", "autostart", "hop", "parent", "sense"],
                   secret=[],
                   ro=["role", "role_carrier", "hop_stored", "sr_hop", "link",
                       "ft_up", "awaiting", "is_sink", "mac_role", "phy_ready",

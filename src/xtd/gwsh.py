@@ -14,11 +14,26 @@ class GwSh:
         self.s = serial.Serial(dev, baud, timeout=1)
         time.sleep(0.4)
 
+    _ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
+    _LOG = re.compile(r'^\[\d\d:\d\d:\d\d\.\d+,\d+\] <\w+> ')
+
     def cmd(self, c, w=1.6, cap=40000):
+        """Send one shell command; return its answer with the prompt echoes
+        and the gateway's own log stream (which shares the port) stripped."""
         self.s.reset_input_buffer()
         self.s.write(('\r%s\r' % c).encode())
         time.sleep(w)
-        return self.s.read(cap).decode('utf-8', 'replace')
+        raw = self.s.read(cap).decode('utf-8', 'replace')
+        out, seen = [], False
+        for line in self._ANSI.sub('', raw).splitlines():
+            line = line.replace('gw:~$', '').strip()
+            if line == c:          # the echo: everything before it is stale
+                seen, out = True, []
+                continue
+            if not seen or not line or self._LOG.match(line):
+                continue
+            out.append(line)
+        return '\n'.join(out)
 
     @staticmethod
     def parse_hexdump(out):

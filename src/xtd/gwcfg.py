@@ -206,8 +206,15 @@ def command(dev: str, op: int, cmd_id: int, payload: dict, timeout: float = 3.0)
     hdr_op, _, length, group, _, rid = struct.unpack(">BBHHBB", rsp[:8])
     body = cbor2.loads(rsp[8:8 + length])
     if isinstance(body, dict) and body.get("rc", 0) not in (0, None):
-        raise RuntimeError(f"SMP error rc={body['rc']}")
+        raise RuntimeError(f"SMP error rc={body['rc']} ({SMP_ERR.get(body['rc'], 'unknown')})")
     return body
+
+
+# mcumgr mgmt error codes, so a refusal reads as a reason and not a number
+SMP_ERR = {1: "EUNKNOWN: the gateway refused it (see its shell log)", 2: "ENOMEM",
+           3: "EINVAL: bad or unsupported value for this build", 4: "ETIMEOUT",
+           5: "ENOENT", 6: "EBADSTATE", 7: "EMSGSIZE", 8: "ENOTSUP", 9: "ECORRUPT",
+           10: "EBUSY"}
 
 
 def default_dev() -> str:
@@ -524,6 +531,7 @@ def main():
 
     sub.add_parser("chipid", help="chip identity of both processors (licence binding)")
     sub.add_parser("inventory", help="every part on the board that can say who it is")
+    sub.add_parser("motion", help="attitude from the on-board IMU/magnetometer (roll, pitch, heading)")
     sen = sub.add_parser("sense", help="latest sample per node (nodes + gateway)")
     sen.add_argument("--temp-offset", default=None, metavar="K|auto",
                      help="self-heating correction for this board's BME688 in kelvin (e.g. 4.5), "
@@ -534,9 +542,9 @@ def main():
                               "modem-factory"], default=None)
     cl = sub.add_parser("cloud", help="ThingsBoard CoAP uplink: read state, or set host/token")
     cl.add_argument("--host", default=None)
-    cl.add_argument("--port", type=int, default=5683)
+    cl.add_argument("--port", type=int, default=None)
     cl.add_argument("--token", default=None)
-    cl.add_argument("--interval", type=int, default=30)
+    cl.add_argument("--interval", type=int, default=None)
     cl.add_argument("--dtls", choices=["on", "off"], default=None, help="CoAP over DTLS 1.2 (5684) to ThingsBoard")
     cl.add_argument("--noproxy", metavar="RDIDHEX[:0]", default=None, help="stop relaying this node (it terminates its own DTLS); RDID:0 resumes")
     cl.add_argument("--pkey", default=None, help="TB device-profile provision key")
@@ -582,10 +590,16 @@ def main():
             rd, tok = nt.split(":", 1)
             print(command(dev, OP_WRITE, ID_CLOUD, {"nrdid": int(rd, 16), "ntok": tok}))
     elif args.cmd == "cloud":
-        if args.host is None and args.token is None and args.pkey is None and args.dtls is None:
+        if all(v is None for v in (args.host, args.port, args.interval, args.token,
+                                   args.pkey, args.psec, args.dtls)):
             print(command(dev, OP_READ, ID_CLOUD, {}))
         else:
-            req = {"port": args.port, "interval": args.interval}
+            # the gateway read-modify-writes: only send what was asked for
+            req = {}
+            if args.port is not None:
+                req["port"] = args.port
+            if args.interval is not None:
+                req["interval"] = args.interval
             if args.host:
                 req["host"] = args.host
             if args.token:
@@ -661,7 +675,11 @@ def main():
             req["cb_period"] = args.cb_period
         if args.scan_ms is not None:
             req["scan_ms"] = args.scan_ms
-        print(command(dev, OP_READ if not req else OP_WRITE, ID_DECT_RADIO, req))
+        r = command(dev, OP_READ if not req else OP_WRITE, ID_DECT_RADIO, req)
+        print(r)
+        tx = r.get("txpower", 0x80)
+        print("mcs %s, txpower %s" % ("auto" if r.get("mcs") == 0xFF else r.get("mcs"),
+              "auto" if tx == 0x80 else "%d dBm" % (tx - 256 if tx > 127 else tx)))
     elif args.cmd == "led":
         req = {}
         if args.breathe is not None:
@@ -869,6 +887,8 @@ def main():
         print("nRF9151 chip_id  0x%08x  (product magic, identical on every board)"
               % r.get("chip_id", 0))
         print("nRF9151 build    0x%08x" % r.get("modem_build", 0))
+    elif args.cmd == "motion":
+        print(command(dev, OP_READ, ID_MOTION, {}))
     elif args.cmd == "inventory":
         r = command(dev, OP_READ, ID_INVENTORY, {})
         if "flash_jedec" in r:

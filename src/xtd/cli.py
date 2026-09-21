@@ -20,6 +20,11 @@ def main(argv=None):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE); return 0
     tool, rest = argv[0], argv[1:]
+    # the sub-tools want -d before their own subcommand; accept it anywhere
+    for flag in ("-d", "--dev"):
+        if flag in rest[1:]:
+            i = rest.index(flag)
+            rest = rest[i:i + 2] + rest[:i] + rest[i + 2:]
     if tool == "version":
         from . import __version__; print(__version__); return 0
     if tool == "ui":
@@ -40,7 +45,11 @@ def main(argv=None):
     else:
         print(USAGE); return 2
     sys.argv = ["xtd " + tool] + rest
-    return m.main()
+    try:
+        return m.main()
+    except (RuntimeError, TimeoutError, OSError) as e:
+        print("xtd %s: %s" % (tool, e), file=sys.stderr)
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())
