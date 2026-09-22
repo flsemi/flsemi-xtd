@@ -336,6 +336,8 @@ const DEC={
   "wifi.sec": v=>({0:"auto",1:"open",2:"wpa2",3:"wpa3"}[v]??v),
   "wifi.band": v=>({0:"any",1:"2.4 GHz",2:"5 GHz"}[v]??v),
   "ip.family": v=>({2:"IPv6"}[v]??v),
+  // an RD id is an address: hex, the way every other tool prints it
+  "dect.parent": v=>v?"0x"+(v>>>0).toString(16).padStart(8,"0")+" (pinned)":"any parent",
   "geo.source": v=>({0:"unset",1:"surveyed",2:"gnss",3:"estimated",4:"derived"}[v]??v),
   "geo.lat": v=>(v/1e7).toFixed(7)+"\u00b0",
   "geo.lon": v=>(v/1e7).toFixed(7)+"\u00b0",
@@ -599,6 +601,7 @@ async function confirmImg(){
 
 async function show(name){
   cur=name; $("#title").textContent=name;
+  if(location.hash.slice(1)!==name) history.replaceState(null,"","#"+name);
   $("#wr").hidden = !(meta.write && meta.writable && meta.writable.includes(name));
   $("#wjson").value="{}"; $("#wres").textContent="";
   for(const b of document.querySelectorAll("#tabs button"))
@@ -692,7 +695,10 @@ async function motion(){
     const b=document.createElement("button");
     b.textContent=s; b.onclick=()=>show(s); nav.appendChild(b);
   }
-  show("status"); slots();
+  const want=decodeURIComponent(location.hash.slice(1));
+  show(meta.subsys.includes(want)?want:"status"); slots();
+  addEventListener("hashchange",()=>{ const h=decodeURIComponent(location.hash.slice(1));
+    if(meta.subsys.includes(h)&&h!==cur) show(h); });
   if(!meta.write) $("#fw").querySelectorAll("button").forEach(b=>b.disabled=true);
   motion(); setInterval(motion, 1000);
   setInterval(()=>{ if(cur!=="plan") show(cur); }, 10000);

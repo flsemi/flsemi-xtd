@@ -29,6 +29,8 @@ Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn
 reports (who it is attached to, how deep, when it was last heard) beside a live
 card per node with its temperature, humidity, air quality and battery.
 
+![The demo wall: a nine-node mesh five hops deep, with a live card per node](doc/stage.png)
+
 ```
 xtd stage -d /dev/cu.usbmodemXXXX1 --site "Building A" --names names.json
 ```
@@ -75,7 +77,11 @@ thing it is demonstrating.
 | `ble` | 28 | Bluetooth configuration window: `--on`, `--off`, `--unpair` |
 | `dfu` | group 1 | this gateway's nRF5340: upload, `--test --reset`, `--confirm` |
 
-Every id the gateway firmware serves (0.6.2) has a command here; the dashboard (`xtd ui`) exposes the same set as panels. `xtd profile dump/diff/restore` round-trips the settable subset of all of them, and `xtd profile site` snapshots the mesh as it is (plan, who is attached to whom, health).
+Every id the gateway firmware serves (0.6.2) has a command here; the dashboard (`xtd ui`) exposes the same set as panels, one per URL fragment (`#dect`, `#cloud`, …), with every field annotated:
+
+![The configuration dashboard on the DECT panel](doc/dashboard.png)
+
+ `xtd profile dump/diff/restore` round-trips the settable subset of all of them, and `xtd profile site` snapshots the mesh as it is (plan, who is attached to whom, health).
 
 ## Verified on hardware
 
