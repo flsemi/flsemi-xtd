@@ -150,6 +150,18 @@ and under one key per product line it is also what selects the artifact whose
 key the kit holds. `xtd update` takes the artifact matching the chip and that
 type, and refuses rather than choosing when a release offers more than one.
 
+## Releasing
+
+Nothing here publishes firmware. When an image is to go out, it goes through
+the company's release process — the same one that governs any other delivery —
+and this repository's part is only the manifest and the artifact naming above.
+`releases/` is empty on purpose: a published image before P1 and the licence
+check are in place would be a published image with nothing behind it.
+
+The tool does not need the process to change: `xtd update` verifies a digest
+and uploads bytes, which is the same job whatever the process decides about
+signing, encryption and who may download.
+
 ## Honest limits, to be said out loud in the licence terms
 
 - A determined attacker with physical possession of a device they bought may
