@@ -55,9 +55,20 @@ to the order it went out on, and that is often worth more than the cryptography.
 4. `product_line` is 0 or equals this image's `image_type`.
 5. `expires` is 0, or the device's notion of time is before it.
 
-In the **secure image**, not the non-secure application: the non-secure side is
-where a modified application would run, and a check it can rewrite is not a
-check. PSA crypto is available there, and the part has a CryptoCell to do it.
+The **secure image** is where this belongs: the non-secure side is where a
+modified application would run, and a check it can rewrite is not a check. PSA
+crypto is already in the product build (`PSA_WANT_ALG_ECDSA`,
+`PSA_WANT_ECC_SECP_R1_256`, `PSA_WANT_ALG_SHA_256`, `TFM_PARTITION_CRYPTO=y`),
+so the verification needs no new dependency — the cost is the public key, the
+check, and a TF-M reconfiguration.
+
+Whether it fits is a measurement, not an assumption: the nRF9151's TF-M was
+cut to 40 KB and the product image sits near 87 % of RAM. If the increment does
+not fit, the fallback is the check in the non-secure application, and the
+fallback's weakness has to be written down rather than glossed: it then rests
+entirely on P1 — an application that could rewrite the check cannot be signed
+by us, so it cannot boot on a unit whose bootloader holds our key. That is a
+real boundary, and a thinner one. The decision follows the measurement.
 
 ## What an unlicensed unit does
 
@@ -102,10 +113,22 @@ send us (it carries the device ids and the image type, nothing secret), and
 `xtd licence install <file>` writes the blob. The tool never signs: issuing is
 a process on our side, on the machine that holds the key.
 
-**Configuration-plane contract needed from the firmware** — proposed, not yet
-implemented:
+**Firmware contract** — two tiers, because the licence belongs to the nRF9151
+and the configuration plane belongs to the nRF5340:
 
-- `gwcfg` id 29 `LICENCE`
-  - read → `{licensed, chip, device_id, product_line, issued, expires, order, reason}`
-  - write → `{blob: <112 octets>}`, answering the same read, or `EINVAL` with a
-    reason for a malformed blob, a bad signature or the wrong device id.
+- **nRF9151, host-interface registers** — the blob is written here and the
+  status is read here. This is the only verifier: one blob, one implementation
+  of the check, whichever way the bytes arrived.
+- **nRF5340, `gwcfg` id 29 `LICENCE`** — a forwarding layer, nothing more.
+  - read → the fields it read from the nRF9151:
+    `{licensed, chip, device_id, product_line, issued, expires, order, reason}`
+  - write → `{blob: <112 octets>}` passed down verbatim, answering the same
+    read, or `EINVAL` with a reason for a malformed blob, a bad signature or
+    the wrong device id.
+
+A board with no nRF5340 (the DK, the nRF9131 EK — bench hardware, not a
+product) takes the same 112 octets through the same nRF9151 registers, written
+by the bench tooling. Same blob, same verifier, no second format.
+
+Producing a request needs no new interface: `DEVICE_ID` at `0x1FF0` (8 octets,
+FICR, read-only, Rev 1.503) already serves what the request carries.
