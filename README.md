@@ -23,6 +23,27 @@ xtd sh -d SHELLPORT 'hif r 0x0024 4'      # raw nRF9151 host-interface register 
 
 Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn` on Windows — `xtd cfg devices` lists what is attached) or `-d ble:<rd id>` once the device has opened its Bluetooth window (`ble --on` over USB, or a double press of Button 2). A gateway advertises as `BFi53-<rd id>`, and `-d ble:` matches any part of that, so the RD id alone is enough. Give the RD id rather than the whole name: firmware before 2026-09 advertised the gateway project's name, which is the same string on every board and so cannot tell two kits apart. `-d` may go before or after the subcommand. On macOS run from Terminal.app so the Bluetooth permission prompt can appear. `xtd sh` is the one command that uses the *second* CDC port (the diagnostic shell, `...XXXX3`).
 
+## Updating a kit from a published release
+
+```
+xtd update -d PORT              # the gateway's nRF5340
+xtd update -d PORT --chip nrf9151 -n     # what would be installed, without installing it
+```
+
+`xtd update` reads what the kit is — board image type, and the batch it belongs
+to — fetches the release manifest, takes only the artifact published for that
+board and that batch, checks its SHA-256, and uploads it through the same paths
+`xtd cfg dfu` / `dfu91` use. It installs nothing if the digest or the size
+disagrees with the manifest, and it refuses rather than guessing when the kit
+does not say which batch it is.
+
+Published images are encrypted to a key that exists only in the kits we
+supplied, and MCUboot decrypts them on-chip during the swap. This tool moves
+bytes it cannot read, which is why a release can be public without being of use
+on hardware that did not come from us. The design, and what is and is not
+implemented today, is in [doc/firmware-distribution.md](doc/firmware-distribution.md)
+— **no images are published yet.**
+
 ## The demo wall
 
 `xtd stage` is a presentation view of a running mesh: the topology each node
