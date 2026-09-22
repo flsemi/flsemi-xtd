@@ -5,3 +5,8 @@ dist/
 *.egg-info/
 .venv/
 .DS_Store
+
+# never, under any circumstances, in a public repository
+*.pem
+*.key
+keys/
