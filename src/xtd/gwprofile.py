@@ -44,10 +44,7 @@ from . import gwcfg as G  # noqa: E402
 SUBSYS = {
     "wifi":  dict(id=G.ID_WIFI_CFG,  set=["ssid", "sec", "band", "enabled"],
                   secret=["psk"],
-                  ro=["state", "rssi", "channel", "ip4", "ip6", "mask4", "gw4",
-                      "cfg_ssid"]),
-    "ip":    dict(id=G.ID_WIFI_IP,   set=["mode", "family", "addr", "mask", "gw"],
-                  secret=[], ro=[]),
+                  ro=["state", "rssi", "channel", "ip6", "cfg_ssid"]),
     "adv":   dict(id=G.ID_WIFI_ADV,  set=["ps", "reg"], secret=[], ro=[]),
     "cloud": dict(id=G.ID_CLOUD,     set=["host", "port", "interval", "dtls"],
                   secret=["token", "pkey", "psec"],

@@ -48,7 +48,7 @@ SUBSYS = {
     "status": (G.ID_STATUS, False),
     "sys":    (G.ID_SYS, True),
     "wifi":   (G.ID_WIFI_CFG, True),
-    "ip":     (G.ID_WIFI_IP, True),
+    "ip":     (G.ID_WIFI_IP, False),
     "adv":    (G.ID_WIFI_ADV, True),
     "cloud":  (G.ID_CLOUD, True),
     "dect":   (G.ID_DECT, True),
@@ -335,8 +335,7 @@ const DEC={
   "wifi.radio": v=>({0:"auto (sink only)",1:"on",2:"off"}[v]??v),
   "wifi.sec": v=>({0:"auto",1:"open",2:"wpa2",3:"wpa3"}[v]??v),
   "wifi.band": v=>({0:"any",1:"2.4 GHz",2:"5 GHz"}[v]??v),
-  "ip.family": v=>({0:"dual",1:"v4",2:"v6"}[v]??v),
-  "ip.mode": v=>({0:"dhcp",1:"static"}[v]??v),
+  "ip.family": v=>({2:"IPv6"}[v]??v),
   "geo.source": v=>({0:"unset",1:"surveyed",2:"gnss",3:"estimated",4:"derived"}[v]??v),
   "geo.lat": v=>(v/1e7).toFixed(7)+"\u00b0",
   "geo.lon": v=>(v/1e7).toFixed(7)+"\u00b0",
@@ -384,7 +383,6 @@ const HELP={
  "status.wifi.state":"Wi-Fi association state",
  "status.wifi.ssid":"network the Wi-Fi is associated to",
  "status.wifi.rssi":"received signal strength, dBm (closer to 0 is stronger)",
- "status.wifi.ip4":"IPv4 address \u2014 always empty: this build has no IPv4 at all",
 
  "sys.ver":"application version", "sys.git":"source commit this image was built from",
  "sys.dirty":"the tree had uncommitted changes when this image was built",
@@ -394,21 +392,16 @@ const HELP={
  "wifi.enabled":"credentials are stored (not the same as the radio being on)",
  "wifi.radio":"radio switch: 0 auto (on only when this gateway is the sink -- a relay/leaf comes up with Wi-Fi off), 1 always on, 2 always off; credentials are kept either way",
  "wifi.radio_allowed":"what the switch resolves to right now, given the DECT role",
- "wifi.ssid":"network name",
  "wifi.sec":"security mode used when associating",
  "wifi.band":"band restriction; 'any' lets the driver choose",
  "wifi.channel":"channel currently in use",
  "wifi.rssi":"signal strength, dBm", "wifi.state":"association state",
- "wifi.ip4":"IPv4 address \u2014 not available in this build",
- "wifi.mask4":"IPv4 netmask \u2014 not available in this build",
- "wifi.gw4":"IPv4 gateway \u2014 not available in this build",
- "wifi.ip6":"IPv6 address in use on the Wi-Fi interface",
+ "wifi.ssid":"network the Wi-Fi is associated to right now (empty when it is not)",
+ "wifi.cfg_ssid":"the stored network name -- what it will associate to",
+ "wifi.ip6":"IPv6 address in use on the Wi-Fi interface (SLAAC; the kit has no IPv4)",
 
- "ip.mode":"static or DHCP \u2014 IPv4 only, inert in this IPv6-only build",
- "ip.family":"which families to run; this build is compiled IPv6-only regardless",
- "ip.addr":"static IPv4 address \u2014 inert in this build",
- "ip.mask":"static IPv4 netmask \u2014 inert in this build",
- "ip.gw":"static IPv4 gateway \u2014 inert in this build",
+ "ip.family":"address family in use; the kit is IPv6-only",
+ "ip.ipv4_supported":"false on every shipped image \u2014 there is no IPv4 stack",
 
  "adv.ps":"Wi-Fi power save", "adv.reg":"regulatory country code",
 
@@ -530,11 +523,17 @@ const HELP={
  "plan.received":"plans received from the cloud",
 };
 
+// The firmware still emits these IPv4 fields; they are always empty and the
+// kit has no IPv4 stack, so the page does not show them at all.
+const HIDE=new Set(["wifi.ip4","wifi.mask4","wifi.gw4","status.wifi.ip4",
+                    "ip.mode","ip.addr","ip.mask","ip.gw"]);
+
 function table(o){
   if(o===null||typeof o!=="object") return String(o);
   if(Array.isArray(o)) return o.map(table).join("<hr style='border:0;border-top:1px solid #1b2740'>");
   let h="<table>";
   for(const k of Object.keys(o)){
+    if(HIDE.has(cur+"."+k)) continue;
     const v=o[k];
     let cell;
     if(typeof v==="object"&&v!==null){

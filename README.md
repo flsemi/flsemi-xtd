@@ -27,7 +27,7 @@ Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn
 | `xtd cfg ...` | Group 64 id | What it does |
 |---|---|---|
 | `status` | 0 | firmware version, SPI link to the nRF9151, USB audio, Wi-Fi association |
-| `wifi` / `scan` / `ip` / `adv` | 1 / 2 / 11 / 12 | credentials and radio switch, site survey, address family (IPv6 only), power-save and country |
+| `wifi` / `scan` / `ip` / `adv` | 1 / 2 / 11 / 12 | credentials and radio switch, site survey, the IPv6 address in use, power-save and country |
 | `dect` | 3 | network id, carrier/band, parent pin, sink flag, autostart, report period, role, hop limit; `--apply`, `--snapshot` |
 | `sec` | 5 | DECT NR+ MAC security: master key (write-only), `--require` |
 | `usb` | 7 | USB Audio (UAC2) on/off |
@@ -66,7 +66,7 @@ Things the interface does not do, by design of the firmware rather than of this 
 - The Wi-Fi PSK is write-only. `profile dump` carries the stored SSID (`cfg_ssid`, gateway 0.6.2 build 2026-09-21 or later; older builds only report the connected one) but a `restore` needs `--psk` typed in.
 - `scan` on a gateway with no credentials brings the interface up for the survey and takes it down again afterwards (same build); older builds answer `EUNKNOWN` unless Wi-Fi is up.
 - `geo` cannot yet be returned to "not set" through this interface: the stack (Rev 1.516) erases the record on a META write of 0, and the gateway's clear path for it is pending.
-- `ip` reports `ipv4_supported: false` and the tool refuses `--static`, `--dhcp` and `--family dual|v4` on such a gateway before sending anything; addressing is SLAAC over Wi-Fi, nothing to configure.
+- `ip` is read-only and the dashboard hides the empty IPv4 fields the firmware still emits: addressing is SLAAC over Wi-Fi, so there is nothing to set.
 - Group 64 ids 4, 6 and 10 are reserved (`ENOTSUP`); there is nothing to call.
 - `dfu` with the image already running reports "same image as the one running; nothing to swap" instead of a test boot.
 
