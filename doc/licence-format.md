@@ -1,0 +1,111 @@
+# Device licence — format and contract
+
+A licence says: *this firmware may run on this chip.* It is signed by FLSEMI
+over the chip's own FICR DEVICEID, and verified on the chip against a public
+key built into the secure image.
+
+**Nothing secret lives in the device.** Extracting a unit yields a public key,
+which is of no use on another unit; forging a licence needs the private key,
+which never leaves our signing machine. That is the whole reason this is the
+primary mechanism rather than image encryption, whose private key would have to
+sit in every unit we ship.
+
+The format is published on purpose. A scheme that needs its structure kept
+secret is not a scheme.
+
+## What it binds to
+
+The **FICR DEVICEID**: 8 bytes, unique per die, **not writable**, served as
+`DEVICE_ID` at register `0x1FF0` on the nRF9151 and in the `chipid` read on the
+configuration plane. The Long RD ID (`0x0024`) is host-writable and must never
+be the anchor — the code comment at that register already says so.
+
+A BFi91XTD carries two dies. The licence binds the **nRF9151**, which is where
+the stack runs. A gateway-only licence for the nRF5340 uses the same format
+with `chip = 2`.
+
+## Layout — 112 octets, big-endian
+
+| offset | size | field | |
+|---|---|---|---|
+| 0 | 4 | `magic` | `0x464C4943` (`FLIC`) |
+| 4 | 1 | `version` | 1 |
+| 5 | 1 | `chip` | 1 = nRF9151, 2 = nRF5340 |
+| 6 | 2 | `flags` | bit 0 = evaluation unit, bit 1 = feature set reserved |
+| 8 | 8 | `device_id` | FICR DEVICEID, as the chip reports it |
+| 16 | 4 | `product_line` | the `image_type` this licence covers, 0 = any |
+| 20 | 4 | `issued` | seconds since 1970 |
+| 24 | 4 | `expires` | seconds since 1970, **0 = perpetual** |
+| 28 | 16 | `order` | ASCII order or customer reference, zero padded |
+| 44 | 4 | `reserved` | zero |
+| 48 | 64 | `signature` | ECDSA P-256 over octets 0..47, `r‖s`, SHA-256 |
+
+48 octets signed, 64 of signature. The signed part carries the device id, so a
+licence copied to another unit fails on the comparison, not on the signature —
+and the failure is diagnosable rather than mysterious.
+
+`order` is what makes a leak traceable: every licence we issue is attributable
+to the order it went out on, and that is often worth more than the cryptography.
+
+## Verification, on the chip
+
+1. `magic` and `version` match, otherwise reject.
+2. ECDSA P-256 / SHA-256 over octets 0..47 against the built-in public key.
+3. `device_id` equals this die's FICR DEVICEID.
+4. `product_line` is 0 or equals this image's `image_type`.
+5. `expires` is 0, or the device's notion of time is before it.
+
+In the **secure image**, not the non-secure application: the non-secure side is
+where a modified application would run, and a check it can rewrite is not a
+check. PSA crypto is available there, and the part has a CryptoCell to do it.
+
+## What an unlicensed unit does
+
+It **boots, and says so.** No radio role starts — no association, no beacon —
+and the configuration plane answers normally with `licensed: false` and a
+reason. It is not bricked and not silent: a unit that fails mysteriously
+generates a support case, and a unit that cannot be talked to cannot be
+licensed afterwards.
+
+## Time
+
+`expires` needs a clock the device trusts. The nRF9151 has no RTC battery, so a
+perpetual licence (`expires = 0`) is the only kind that is sound without one.
+For evaluation units, the honest implementation is a **monotonic counter of
+powered hours in NVS**, not wall-clock time, and the licence carries a duration
+rather than a date. Until that exists, evaluation kits get a perpetual licence
+and the limit lives in the contract.
+
+## Where it is stored
+
+Settings/NVS, key `flic`. It survives an application update and does not
+survive a full erase — which is the right way round: a wiped unit needs a new
+licence, and only we can issue one, for a device id we can check against what
+we shipped.
+
+## The transition, which has to be planned before the check lands
+
+Every board on the bench today is unlicensed. Landing an enforcing check
+without this step stops the whole bench at once:
+
+1. Issue licences for every bench and demo unit first — the device ids are
+   already recorded per board.
+2. Ship the check **reporting only** for one release: `licensed: false` is
+   visible on the configuration plane and in the logs, nothing is refused.
+3. Turn on enforcement in the following release, once the estate reads
+   `licensed: true` everywhere.
+
+## Host side
+
+`xtd licence` reads the status, `xtd licence --request` produces the request to
+send us (it carries the device ids and the image type, nothing secret), and
+`xtd licence install <file>` writes the blob. The tool never signs: issuing is
+a process on our side, on the machine that holds the key.
+
+**Configuration-plane contract needed from the firmware** — proposed, not yet
+implemented:
+
+- `gwcfg` id 29 `LICENCE`
+  - read → `{licensed, chip, device_id, product_line, issued, expires, order, reason}`
+  - write → `{blob: <112 octets>}`, answering the same read, or `EINVAL` with a
+    reason for a malformed blob, a bad signature or the wrong device id.

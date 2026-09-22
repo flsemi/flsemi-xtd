@@ -1,6 +1,12 @@
 # Firmware distribution from GitHub, bound to hardware we sold
 
-Decided 2026-09-22: **one encryption key per product line**, and all three layers.
+Decided 2026-09-22, revised the same day: **P3 first**. The licence bound to
+each chip's FICR device id is the primary mechanism, because it is the only one
+of the three with no shared secret in the shipped hardware. P1 (our own signing
+key) goes with it. P2 (image encryption, one key per product line) is deferred:
+it protects the binary from being read, which is a different goal from stopping
+it running on hardware we did not sell, and its private key would have to live
+in every unit.
 This is the contract between the tool, the two firmware projects and the
 manufacturing process. It is a design note, not a shipped feature.
 
@@ -10,7 +16,21 @@ manufacturing process. It is a design note, not a shipped feature.
 |---|---|---|---|
 | **P1** | someone else's firmware running on our hardware | MCUboot image signature with **our own key**, plus APPROTECT | **absent** — both bootloaders use the MCUboot/NCS default development key (no `CONFIG_BOOT_SIGNATURE_KEY_FILE` in either project) |
 | **P2** | our firmware running on hardware we did not sell | MCUboot **encrypted images**, key held only by devices we provisioned | absent — `CONFIG_BOOT_ENCRYPT_IMAGE=n` |
-| **P3** | a decrypted image lifted off a legitimate device and run elsewhere | run-time licence blob signed over the FICR DEVICEID, checked in the secure image | absent; the device-id registers it would bind to already exist |
+| **P3** | our firmware running on a unit we did not licence | licence blob signed over the FICR DEVICEID, checked in the secure image | **format fixed, host side done** (doc/licence-format.md, `xtd licence`); the on-chip check is the firmware work |
+
+**Why P3 and not P2 as the primary.** P2's private key sits in every unit we
+ship: one extraction ends the protection for the whole product line,
+retroactively. P3's device-side material is a *public* key — extracting a unit
+yields nothing usable on another unit, and forging a licence needs a private key
+that never leaves our signing machine. Same engineering effort, and one of the
+two has no shared-secret failure mode.
+
+What P3 does not do: someone who already holds a plaintext image *and* controls
+the bootloader on their own board can patch the check out. That is what P1 and
+P2 are for — P1 so our own units refuse anything we did not sign, P2 (if it is
+ever done) so the plaintext is not available to begin with. P3 stops the case
+that actually matters here: our published image flashed as-is onto hardware we
+did not supply.
 
 A signature gives P1 only. It is routinely mistaken for P2, and it is not.
 

@@ -9,6 +9,7 @@ USAGE = """usage: xtd <tool> [args]
   ui        local browser dashboard        (xtd ui -d /dev/cu.usbmodemXXXX1)
   stage     local demo wall: mesh + sensors (xtd stage -d /dev/cu.usbmodemXXXX1)
   update    install the firmware published for this kit
+  licence   read, request or install this unit's licence
   cfg       configuration & firmware       (xtd cfg dect --help)
   profile   whole-device dump/diff/restore (xtd profile dump out.json)
   sh        raw shell helper               (xtd sh 'hif r 0x0028 4')
@@ -35,6 +36,8 @@ def main(argv=None):
         from . import gwstage as m
     elif tool == "update":
         from . import gwupdate as m
+    elif tool in ("licence", "license"):
+        from . import gwlicence as m
     elif tool == "cfg":
         from . import gwcfg as m
     elif tool == "profile":
@@ -53,7 +56,7 @@ def main(argv=None):
     sys.argv = ["xtd " + tool] + rest
     try:
         return m.main()
-    except (RuntimeError, TimeoutError, OSError) as e:
+    except (RuntimeError, TimeoutError, OSError, ValueError) as e:
         print("xtd %s: %s" % (tool, e), file=sys.stderr)
         return 1
 

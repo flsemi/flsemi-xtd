@@ -10,4 +10,4 @@
 
 Nothing here talks to any FLSEMI server. Every value comes off the wire from the device in front of you.
 """
-__version__ = "0.3.1"
+__version__ = "0.4.0"

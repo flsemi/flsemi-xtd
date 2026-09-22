@@ -23,6 +23,25 @@ xtd sh -d SHELLPORT 'hif r 0x0024 4'      # raw nRF9151 host-interface register 
 
 Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn` on Windows — `xtd cfg devices` lists what is attached) or `-d ble:<rd id>` once the device has opened its Bluetooth window (`ble --on` over USB, or a double press of Button 2). A gateway advertises as `BFi53-<rd id>`, and `-d ble:` matches any part of that, so the RD id alone is enough. Give the RD id rather than the whole name: firmware before 2026-09 advertised the gateway project's name, which is the same string on every board and so cannot tell two kits apart. `-d` may go before or after the subcommand. On macOS run from Terminal.app so the Bluetooth permission prompt can appear. `xtd sh` is the one command that uses the *second* CDC port (the diagnostic shell, `...XXXX3`).
 
+## Licensing a unit
+
+A unit runs the stack when it carries a licence signed over its own FICR device
+id — which is unique per die and not writable, so a licence cannot be moved to
+another unit. The device holds only a public key; nothing secret is shipped in
+the hardware.
+
+```
+xtd licence -d PORT                      # what this unit carries
+xtd licence -d PORT --request unit.json  # the request to send us (carries no secret)
+xtd licence -d PORT --install unit.flic  # install what comes back
+xtd licence --show unit.flic             # read a licence file, no device needed
+```
+
+The format is published in [doc/licence-format.md](doc/licence-format.md) — the
+security is in the key, not in the structure. **The on-chip check is not
+implemented yet**; until it is, `xtd licence` says so rather than implying a
+unit is protected.
+
 ## Updating a kit from a published release
 
 ```
