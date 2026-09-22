@@ -51,58 +51,52 @@ def describe_device(dev):
         "dev_id": chip.get("dev_id", ""),
         "modem_dev_id": chip.get("modem_dev_id", ""),
         "rdid": "%08x" % (chip.get("modem_id") or 0),
-        # the gateway reports its batch once the firmware carries one; until
-        # then this is absent and the caller must say which batch it holds
-        "batch": chip.get("batch") or sysv.get("batch"),
         "gw_version": sysv.get("ver", "?"),
         "image_type": ota.get("board") or ota.get("image_type"),
         "node_build": ota.get("running_id"),
     }
 
 
-def pick(manifest, chip, image_type, batch):
+def pick(manifest, chip, image_type):
     """The one artifact for this kit, or a refusal that says what was wrong.
 
-    Deliberately never falls back to 'the only one there is': installing an
-    image meant for another board or another batch is the failure this whole
-    arrangement exists to prevent, and a wrong image on a deployed unit is
-    recovered with a cable and a site visit.
+    Deliberately never falls back to 'the only one there is'. `image_type` is
+    the board target and layout, and under one encryption key per product line
+    it is also what says which artifact this kit holds the key for: the wrong
+    one uploads, fails to decrypt and does not boot, which is a site visit.
+    Refusing is the cheaper answer.
     """
     arts = [a for a in manifest.get("artifacts", []) if a.get("chip") == chip]
     if not arts:
         return None, "the manifest publishes nothing for the %s" % chip
-    if image_type is not None:
-        want = "0x%08x" % image_type
-        arts = [a for a in arts if str(a.get("image_type", "")).lower() == want]
-        if not arts:
-            return None, ("the manifest has no %s image of type %s -- this kit "
-                          "reports that type and will not take another" % (chip, want))
-    if batch:
-        arts = [a for a in arts if str(a.get("batch", "")) == str(batch)]
-        if not arts:
-            return None, ("nothing published for batch %s. An image of another "
-                          "batch is encrypted to a key this kit does not hold: "
-                          "it would upload and then fail to boot" % batch)
-    elif len({a.get("batch") for a in arts}) > 1:
-        return None, ("this kit does not report which batch it belongs to and "
-                      "the release carries several -- pass --batch <id> (it is "
-                      "on the delivery note)")
+    if image_type is None:
+        if len(arts) > 1:
+            return None, ("this kit does not report its image type and the "
+                          "release carries several %s images -- update the "
+                          "gateway first, or name the file with --file" % chip)
+        return arts[0], None
+    want = "0x%08x" % image_type
+    arts = [a for a in arts if str(a.get("image_type", "")).lower() == want]
+    if not arts:
+        return None, ("the manifest has no %s image of type %s -- this kit "
+                      "reports that type and holds the key for no other" % (chip, want))
+    if len(arts) > 1:
+        return None, ("the release offers %d %s images of type %s; it should "
+                      "offer one. Refusing rather than choosing" % (len(arts), chip, want))
     return arts[0], None
 
 
 def main():
     ap = argparse.ArgumentParser(
         description="Install the firmware published for this kit.",
-        epilog="The published image is encrypted to the kit; this tool never "
-               "decrypts it, and an image published for another batch or "
-               "another board will not boot.")
+        epilog="The published image is encrypted to the kit's product line; "
+               "this tool never decrypts it, and an image published for "
+               "another product line will not boot.")
     ap.add_argument("-d", "--dev", default=None, help="the kit's SMP port, or ble:<rd id>")
     ap.add_argument("--chip", choices=[CHIP_5340, CHIP_9151], default=CHIP_5340,
                     help="which processor to update (default: the gateway's nRF5340)")
     ap.add_argument("--manifest", default=MANIFEST_URL,
                     help="release manifest (URL, or a local file for an offline site)")
-    ap.add_argument("--batch", default=None,
-                    help="batch id, when the kit's firmware does not yet report one")
     ap.add_argument("--file", default=None,
                     help="install this local artifact instead of downloading "
                          "(still checked against the manifest's digest)")
@@ -113,11 +107,9 @@ def main():
 
     dev = args.dev or G.default_dev()
     me = describe_device(dev)
-    batch = args.batch or me["batch"]
-    print("kit %s  gateway %s  node image type %s  batch %s"
+    print("kit %s  gateway %s  image type %s"
           % (me["rdid"], me["gw_version"],
-             ("0x%08x" % me["image_type"]) if me["image_type"] else "unknown",
-             batch or "not reported"))
+             ("0x%08x" % me["image_type"]) if me["image_type"] else "unknown"))
 
     try:
         manifest = json.loads(fetch(args.manifest))
@@ -125,7 +117,7 @@ def main():
         sys.exit("xtd update: cannot read the release manifest (%s): %s"
                  % (args.manifest, e))
 
-    art, why = pick(manifest, args.chip, me["image_type"], batch)
+    art, why = pick(manifest, args.chip, me["image_type"])
     if art is None:
         sys.exit("xtd update: %s" % why)
 

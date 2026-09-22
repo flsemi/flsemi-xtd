@@ -1,6 +1,6 @@
 # Firmware distribution from GitHub, bound to hardware we sold
 
-Decided 2026-09-22: **per-batch encryption keys**, and all three layers.
+Decided 2026-09-22: **one encryption key per product line**, and all three layers.
 This is the contract between the tool, the two firmware projects and the
 manufacturing process. It is a design note, not a shipped feature.
 
@@ -28,49 +28,63 @@ plaintext.** MCUboot decrypts in the bootloader, on-chip, during the swap.
 That is what makes a public GitHub release acceptable: to anyone without
 one of our boards, the artifact is inert.
 
-## Why per batch
+## Why one key per product line
 
 The mesh distributes one image between nodes (`nrota`, EP 0x2A3C). Per-device
 keys would mean a distinct ciphertext per node, which breaks mesh OTA outright
-and does not fit in a GitHub release. Per-product-line keys keep everything
-working but make one extracted key the end of the product line's protection.
+and does not fit in a public release. Per-batch keys keep mesh OTA working
+within a batch but need a batch id carried in the image stamp, compared in the
+OTA exchange and reported on the configuration plane — otherwise a mixed-batch
+site produces download-then-fail loops that look like a radio problem.
 
-Per batch is the middle: nodes of one batch share a ciphertext, so mesh OTA is
-unchanged within a batch; an extracted key costs one batch and the next batch
-ships a new one.
+One key per product line avoids all of that. A product line already has an
+identity in the image: `image_type` in the stamp (`nrstamp.h`) is the board
+target and layout, which is what tells a Thingy:91 X image from an nRF9151 DK
+image and what stops the wrong one being installed today. The release keys on
+the same field, so:
+
+- **no new firmware field is needed** — no batch id in the stamp, none on the
+  configuration plane, no change to the OTA QUERY/INFO comparison;
+- mesh OTA is untouched: every node of a product line takes the same ciphertext;
+- one artifact per chip per release.
 
 **Consequence for manufacturing:** MCUboot holds the image-encryption private
-key, so the *bootloader* is batch-specific and is flashed at manufacture. The
-batch key never leaves the signing machine and the device.
+key, so the bootloader is product-line-specific and is flashed at manufacture.
+The key never leaves the signing machine and the devices.
 
-**Consequence for the mesh:** a node must not pull an image it cannot decrypt.
-The OTA stamp (`nrstamp.h`: `build_time`, `build_id`, `image_type`, `flags`,
-`check`) needs a **batch id**, and the QUERY/INFO exchange must compare it —
-otherwise a mixed-batch site produces download-then-fail loops that look like
-a radio problem.
+**The cost, stated plainly:** one key extracted from any single unit ends the
+P2 protection for that whole product line, retroactively and for every unit
+ever shipped on it. Two things follow, and neither is optional:
+
+1. **P3 carries the weight now.** With one shared key, the licence blob bound
+   to the FICR DEVICEID is the only property that is per unit, and the only
+   thing still standing if the line key leaks. Build it with that in mind
+   rather than as a nicety.
+2. **A rotation plan before the first release.** A new product line, or a
+   hardware revision that gets its own bootloader, is the natural rotation
+   point. Decide in advance what a leak response looks like — a new key can
+   only protect units flashed after it, so the answer is a product decision,
+   not an engineering one.
 
 ## What each side owns
 
 **BFi53USB7IP (nRF5340)**
 1. Own signing key (`CONFIG_BOOT_SIGNATURE_KEY_FILE`), replacing the default.
-2. `CONFIG_BOOT_ENCRYPT_IMAGE=y` with the batch KEK.
-3. Expose the **batch id** on the configuration plane — the natural home is
-   the `chipid` read (id 25), beside the two device ids.
-4. APPROTECT on production units.
+2. `CONFIG_BOOT_ENCRYPT_IMAGE=y` with the product line's KEK.
+3. APPROTECT on production units.
 
 **BFi91NR7DLCVG (nRF9151)**
 1. Own signing key for the MCUboot used by the `dfu91` serial-recovery path.
-2. `CONFIG_BOOT_ENCRYPT_IMAGE=y`, same batch KEK scheme.
-3. **Batch id in the image stamp**, and in the OTA QUERY/INFO comparison, so a
-   node only pulls what it can decrypt.
-4. P3: licence blob bound to FICR DEVICEID (0x1FF0), checked in the secure
-   image rather than the non-secure application.
+2. `CONFIG_BOOT_ENCRYPT_IMAGE=y`, the same product-line KEK scheme.
+3. P3, and it matters more under one shared key than it would under a narrower one:
+   a licence blob bound to FICR DEVICEID (0x1FF0), checked in the secure image
+   rather than the non-secure application.
 
 **Manufacturing / business**
 - Who holds the private keys, and on what machine. An offline machine is the
-  minimum; an HSM is the honest answer for a key that gates a product line.
-- Batch key generation, the record of which serial numbers belong to which
-  batch, and what a key rotation looks like.
+  minimum; an HSM is the honest answer for a key that gates an entire product
+  line — under this decision, that is exactly what it does.
+- The rotation point and the leak response, decided before the first release.
 
 **flsemi-xtd (this repository)**
 - `xtd update`: read the device, fetch the manifest, pick the artifact that
@@ -91,9 +105,8 @@ One JSON file per release, published beside the artifacts.
     {
       "chip": "nrf5340",
       "image_type": "0x706b1e6a",
-      "batch": "2026Q4-A",
       "version": "0.6.3",
-      "file": "BFi53USB7IP-0.6.3-2026Q4-A.enc.bin",
+      "file": "BFi53USB7IP-0.6.3.enc.bin",
       "sha256": "…",
       "size": 816192,
       "encrypted": true
@@ -101,9 +114,8 @@ One JSON file per release, published beside the artifacts.
     {
       "chip": "nrf9151",
       "image_type": "0x706b1e6a",
-      "batch": "2026Q4-A",
       "version": "1.520",
-      "file": "BFi91NR7DLCVG-1.520-2026Q4-A.enc.bin",
+      "file": "BFi91NR7DLCVG-1.520.enc.bin",
       "sha256": "…",
       "size": 450188,
       "encrypted": true
@@ -113,16 +125,18 @@ One JSON file per release, published beside the artifacts.
 ```
 
 `image_type` is the stamp field that already distinguishes a Thingy:91 X image
-from an nRF9151 DK image, so a customer cannot install the wrong one by hand.
-`batch` is the new field, and until the firmware reports it, `xtd update`
-refuses to guess: it says the device does not report a batch and asks for
-`--batch`.
+from an nRF9151 DK image, so a customer cannot install the wrong one by hand —
+and under one key per product line it is also what selects the artifact whose
+key the kit holds. `xtd update` takes the artifact matching the chip and that
+type, and refuses rather than choosing when a release offers more than one.
 
 ## Honest limits, to be said out loud in the licence terms
 
 - A determined attacker with physical possession of a device they bought may
   attempt key extraction. APPROTECT and the secure partition raise the cost;
-  they do not make it impossible.
+  they do not make it impossible. Under one key per product line, a single
+  success is a product-line event — which is the trade that was chosen, with
+  P3 as the layer that survives it.
 - This is a deterrent and a clear legal boundary, not DRM.
 - The nRF9151 modem firmware is Nordic's and is distributed under Nordic's
   terms; nothing here changes that.

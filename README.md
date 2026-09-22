@@ -30,12 +30,11 @@ xtd update -d PORT              # the gateway's nRF5340
 xtd update -d PORT --chip nrf9151 -n     # what would be installed, without installing it
 ```
 
-`xtd update` reads what the kit is — board image type, and the batch it belongs
-to — fetches the release manifest, takes only the artifact published for that
-board and that batch, checks its SHA-256, and uploads it through the same paths
-`xtd cfg dfu` / `dfu91` use. It installs nothing if the digest or the size
-disagrees with the manifest, and it refuses rather than guessing when the kit
-does not say which batch it is.
+`xtd update` reads what the kit is — the board image type it reports — fetches
+the release manifest, takes only the artifact published for that board, checks
+its SHA-256, and uploads it through the same paths `xtd cfg dfu` / `dfu91` use.
+It installs nothing if the digest or the size disagrees with the manifest, and
+it refuses rather than choosing when a release offers more than one candidate.
 
 Published images are encrypted to a key that exists only in the kits we
 supplied, and MCUboot decrypts them on-chip during the swap. This tool moves
