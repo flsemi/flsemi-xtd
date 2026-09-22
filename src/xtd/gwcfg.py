@@ -600,8 +600,12 @@ def main():
     cl.add_argument("--noproxy", metavar="RDIDHEX[:0]", default=None, help="stop relaying this node (it terminates its own DTLS); RDID:0 resumes")
     cl.add_argument("--pkey", default=None, help="TB device-profile provision key")
     cl.add_argument("--psec", default=None, help="TB device-profile provision secret")
-    cl.add_argument("--ntoken", action="append", default=None, metavar="RDIDHEX:TOKEN",
-                    help="store one node's TB access token (repeatable); token distribution across gateways")
+    cl.add_argument("--ntoken", action="append", default=None, metavar="RDIDHEX:[TOKEN]",
+                    help="store one node's TB access token, e.g. 06aa8c8f:AbC123 (repeatable). "
+                         "Nothing after the colon DELETES that node's token -- the only way to "
+                         "un-enrol a node short of a factory reset. `cloud` lists what is stored "
+                         "as `ntokens` (gateway firmware from 2026-09-22; older builds refuse "
+                         "the deletion with EINVAL and do not report the list)")
     args = ap.parse_args()
 
     if args.cmd == "devices":
@@ -654,12 +658,29 @@ def main():
         print(command(dev, OP_WRITE, ID_CLOUD, {"noproxy": int(rd, 16), "noproxy_on": 0 if flag == "0" else 1}))
     elif args.cmd == "cloud" and args.ntoken:
         for nt in args.ntoken:
-            rd, tok = nt.split(":", 1)
-            print(command(dev, OP_WRITE, ID_CLOUD, {"nrdid": int(rd, 16), "ntok": tok}))
+            rd, _, tok = nt.partition(":")
+            rdid = int(rd, 16)
+            try:
+                r = command(dev, OP_WRITE, ID_CLOUD, {"nrdid": rdid, "ntok": tok})
+            except RuntimeError as e:
+                # ENOENT on a delete is an answer, not a failure: the node had
+                # no token, which is the state that was being asked for
+                if not tok and "rc=5" in str(e):
+                    print("%08x: no token was stored" % rdid)
+                    continue
+                raise
+            print("%08x: %s" % (rdid, "token deleted" if not tok else "token stored"))
+            if "ntokens" in r:
+                left = ["%08x" % v for v in r["ntokens"]]
+                print("  tokens now stored for: %s" % (", ".join(left) or "(none)"))
     elif args.cmd == "cloud":
         if all(v is None for v in (args.host, args.port, args.interval, args.token,
                                    args.pkey, args.psec, args.dtls)):
-            print(command(dev, OP_READ, ID_CLOUD, {}))
+            r = command(dev, OP_READ, ID_CLOUD, {})
+            print(r)
+            if r.get("ntokens"):
+                print("per-node tokens stored for: %s"
+                      % ", ".join("%08x" % v for v in r["ntokens"]))
         else:
             # the gateway read-modify-writes: only send what was asked for
             req = {}

@@ -62,7 +62,7 @@ thing it is demonstrating.
 | `dfu91` | 8 | nRF9151 image via the gateway's MCUboot serial-recovery proxy |
 | `sys` | 9 | version/uptime; `--reset warm\|cold\|factory\|modem\|wifi\|wifi-creds\|modem-stack\|modem-factory` |
 | `sense` | 15 | latest sample per node; `--temp-offset` |
-| `cloud` | 16 | ThingsBoard CoAP uplink: host, port, token, interval, DTLS, per-node tokens, proxy exclusions |
+| `cloud` | 16 | ThingsBoard CoAP uplink: host, port, token, interval, DTLS, per-node tokens (`--ntoken <rd id>:` with nothing after the colon removes one), proxy exclusions |
 | `hif` | 17 | park the SPI host interface so another host can own the nRF9151 |
 | `led` | 18 | air-quality indicator (LED2) and the nRF9151's LED1 |
 | `radio` | 19 | MCS, TX power, chain mode, cluster-beacon period, scan timeout |
