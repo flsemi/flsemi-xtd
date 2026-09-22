@@ -124,8 +124,16 @@ async def _ble_connect(want: str):
         if dev:
             break
     if dev is None:
-        raise TimeoutError("no advertising BFi53 named *%s* - open a window first "
-                           "(gwcfg ble --on over USB, or Button 2 double press)" % want)
+        seen = sorted({(adv.local_name or "").strip()
+                       for _, (d, adv) in found.items() if adv.local_name})
+        raise TimeoutError(
+            "no device advertising a name containing *%s*.\n"
+            "  advertising right now: %s\n"
+            "  A gateway advertises as BFi53-<rd id>, and only while its window "
+            "is open -- `xtd cfg -d <usb port> ble --on`, or a double press of "
+            "Button 2. (Firmware before 2026-09 advertised the gateway project's "
+            "name instead, which is identical on every board: match on the rd id.)"
+            % (want, ", ".join(seen) if seen else "(nothing with a name)"))
     c = BleakClient(dev, timeout=20.0)
     await c.connect()
     q = asyncio.Queue()
@@ -216,6 +224,49 @@ SMP_ERR = {1: "EUNKNOWN: the gateway refused it (see its shell log)", 2: "ENOMEM
            5: "ENOENT", 6: "EBADSTATE: not possible in the gateway's current state",
            7: "EMSGSIZE", 8: "ENOTSUP: reserved id, nothing served", 9: "ECORRUPT",
            10: "EBUSY"}
+
+
+def candidate_ports():
+    """Every serial port that could be a gateway, newest API first.
+
+    pyserial knows the USB descriptors on all three platforms; the /dev glob
+    below is the macOS fallback for the case where it does not.
+    """
+    try:
+        from serial.tools import list_ports
+        ports = [p.device for p in list_ports.comports()]
+    except Exception:
+        ports = []
+    if not ports:
+        ports = glob.glob("/dev/tty.usbmodem*") + glob.glob("/dev/cu.usbmodem*")
+    # J-Link OB VCOM ports embed the probe serial (long digit runs); a
+    # gateway's CDC-ACM gets a short host-assigned suffix.
+    out = []
+    for d in sorted(set(ports)):
+        tail = d.split("usbmodem")[-1] if "usbmodem" in d else ""
+        if tail and len(tail) > 8:
+            continue
+        if "/dev/cu." in d and d.replace("/dev/cu.", "/dev/tty.") in ports:
+            continue          # the same port under both names
+        out.append(d)
+    return out
+
+
+def probe(dev: str):
+    """What is on this port, or None. A gateway answers SMP; its shell does
+    not, which is the only difference a host can see from the outside."""
+    try:
+        st = command(dev, OP_READ, ID_STATUS, {}, timeout=1.5)
+        chip = command(dev, OP_READ, ID_CHIPID, {}, timeout=1.5)
+        dect = command(dev, OP_READ, ID_DECT, {}, timeout=1.5)
+    except Exception:
+        return None
+    return {"dev": dev, "ver": st.get("ver", "?"),
+            "dev_id": chip.get("dev_id", ""),
+            "rdid": "%08x" % (chip.get("modem_id") or 0),
+            "role": {0: "none", 1: "leaf", 2: "relay", 3: "sink"}.get(dect.get("role"), "?"),
+            "carrier": dect.get("carrier"), "band": dect.get("band"),
+            "link": dect.get("link", False)}
 
 
 def default_dev() -> str:
@@ -451,7 +502,7 @@ def main():
 
     ble = sub.add_parser("ble", help="BLE configuration window: SMP over GATT (gwcfg + DFU) and the "
                                       "shell over NUS for a phone; off by default")
-    ble.add_argument("--on", action="store_true", help="open (or re-arm) the window: advertise as the device name")
+    ble.add_argument("--on", action="store_true", help="open (or re-arm) the window: advertise as BFi53-<rd id>")
     ble.add_argument("--minutes", type=float, default=None, help="window length for --on (default 10)")
     ble.add_argument("--off", action="store_true", help="close the window now (drops the phone)")
     ble.add_argument("--unpair", action="store_true", help="forget every bond (then forget the device on the phone too)")
@@ -526,6 +577,8 @@ def main():
     geo.add_argument("--v-acc", type=int, default=None, metavar="M",
                      help="vertical accuracy in metres (255 = unknown)")
 
+    sub.add_parser("devices", help="every BFi91XTD kit attached to this computer, "
+                   "and which port to give -d")
     sub.add_parser("chipid", help="chip identity of both processors (licence binding)")
     sub.add_parser("inventory", help="every part on the board that can say who it is")
     sub.add_parser("motion", help="attitude from the on-board IMU/magnetometer (roll, pitch, heading)")
@@ -538,9 +591,10 @@ def main():
     sy.add_argument("--reset", choices=["warm", "cold", "factory", "modem", "wifi", "wifi-creds", "modem-stack",
                               "modem-factory"], default=None)
     cl = sub.add_parser("cloud", help="ThingsBoard CoAP uplink: read state, or set host/token")
-    cl.add_argument("--host", default=None)
+    cl.add_argument("--host", default=None,
+                    help="ThingsBoard host: name or IPv6 literal; '' forgets it")
     cl.add_argument("--port", type=int, default=None)
-    cl.add_argument("--token", default=None)
+    cl.add_argument("--token", default=None, help="device access token; '' forgets it")
     cl.add_argument("--interval", type=int, default=None)
     cl.add_argument("--dtls", choices=["on", "off"], default=None, help="CoAP over DTLS 1.2 (5684) to ThingsBoard")
     cl.add_argument("--noproxy", metavar="RDIDHEX[:0]", default=None, help="stop relaying this node (it terminates its own DTLS); RDID:0 resumes")
@@ -549,6 +603,22 @@ def main():
     cl.add_argument("--ntoken", action="append", default=None, metavar="RDIDHEX:TOKEN",
                     help="store one node's TB access token (repeatable); token distribution across gateways")
     args = ap.parse_args()
+
+    if args.cmd == "devices":
+        # this one asks the machine, not a device: -d would be meaningless
+        found = [p for p in (probe(d) for d in candidate_ports()) if p]
+        if not found:
+            print("no BFi91XTD gateway answered on any serial port.\n"
+                  "Plug the USB-C cable into the kit's own connector (not a "
+                  "debugger), and on macOS give the tool a moment after plugging in.")
+            return 1
+        print("%-24s %-8s %-10s %-7s %s" % ("port", "fw", "rd id", "role", "carrier"))
+        for p in found:
+            print("%-24s %-8s %-10s %-7s %s%s"
+                  % (p["dev"], p["ver"], p["rdid"], p["role"],
+                     p["carrier"], "" if p["link"] else "   (9151 not answering)"))
+        print("\nuse one of these with -d, e.g.  xtd cfg -d %s status" % found[0]["dev"])
+        return 0
 
     dev = args.dev or default_dev()
 
@@ -597,13 +667,16 @@ def main():
                 req["port"] = args.port
             if args.interval is not None:
                 req["interval"] = args.interval
-            if args.host:
+            # `is not None`, not truthiness: "" is how the gateway is told
+            # to forget a host or a token, and a tool that cannot un-enrol a
+            # device can only ever enrol it
+            if args.host is not None:
                 req["host"] = args.host
-            if args.token:
+            if args.token is not None:
                 req["token"] = args.token
-            if args.pkey:
+            if args.pkey is not None:
                 req["pkey"] = args.pkey
-            if args.psec:
+            if args.psec is not None:
                 req["psec"] = args.psec
             if args.dtls:
                 req["dtls"] = 1 if args.dtls == "on" else 0
@@ -830,7 +903,15 @@ def main():
             print(command(dev, OP_WRITE, ID_BLE, {"off": True}))
         elif args.on:
             secs = int(args.minutes * 60) if args.minutes else 0
-            print(command(dev, OP_WRITE, ID_BLE, {"on": secs}))
+            r = command(dev, OP_WRITE, ID_BLE, {"on": secs})
+            print(r)
+            # The advertised name carries the RD id on current firmware and
+            # did not on older builds, so a customer with two kits cannot
+            # guess it. Hand back the exact string the next command wants.
+            if r.get("advertising") and r.get("name"):
+                print("\nnow reachable without the cable:\n"
+                      "  xtd cfg -d ble:%s status        (%s s of window)"
+                      % (r["name"], r.get("window_left_s", secs)))
         else:
             print(command(dev, OP_READ, ID_BLE, {}))
     elif args.cmd == "hif":
