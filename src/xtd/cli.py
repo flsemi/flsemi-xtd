@@ -7,6 +7,7 @@ import sys
 USAGE = """usage: xtd <tool> [args]
 
   ui        local browser dashboard        (xtd ui -d /dev/cu.usbmodemXXXX1)
+  stage     local demo wall: mesh + sensors (xtd stage -d /dev/cu.usbmodemXXXX1)
   cfg       configuration & firmware       (xtd cfg dect --help)
   profile   whole-device dump/diff/restore (xtd profile dump out.json)
   sh        raw shell helper               (xtd sh 'hif r 0x0028 4')
@@ -29,6 +30,8 @@ def main(argv=None):
         from . import __version__; print(__version__); return 0
     if tool == "ui":
         from . import gwui as m
+    elif tool == "stage":
+        from . import gwstage as m
     elif tool == "cfg":
         from . import gwcfg as m
     elif tool == "profile":

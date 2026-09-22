@@ -9,6 +9,7 @@ Everything runs on the machine with the cable or the Bluetooth radio. Nothing he
 ```
 pip install flsemi-xtd          # or: uvx flsemi-xtd
 
+xtd stage -d PORT               # local demo wall at http://127.0.0.1:8770 (read-only)
 xtd ui -d PORT                  # local dashboard at http://127.0.0.1:8765 (read-only)
 xtd ui -d PORT --allow-write    # ... with configuration writes enabled
 xtd cfg -d PORT status          # role, carrier, association, uptime
@@ -21,6 +22,31 @@ xtd sh -d SHELLPORT 'hif r 0x0024 4'      # raw nRF9151 host-interface register 
 ```
 
 Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn` on Windows) or `-d ble:<name or rd-id>` once the device has opened its Bluetooth window (double-press Button 2). `-d` may go before or after the subcommand. On macOS run from Terminal.app so the Bluetooth permission prompt can appear. `xtd sh` is the one command that uses the *second* CDC port (the diagnostic shell, `...XXXX3`).
+
+## The demo wall
+
+`xtd stage` is a presentation view of a running mesh: the topology each node
+reports (who it is attached to, how deep, when it was last heard) beside a live
+card per node with its temperature, humidity, air quality and battery.
+
+```
+xtd stage -d /dev/cu.usbmodemXXXX1 --site "Building A" --names names.json
+```
+
+`names.json` gives the nodes the names the room knows them by, which is what a
+visitor can read:
+
+```json
+{"06aa8c8f": "Lobby (sink)", "5d2a5579": "Stairwell", "e2e76294": "Cold store"}
+```
+
+One process owns the USB port and serves every browser pointed at it, so a
+projector and a laptop show the same wall. **The gateway's ThingsBoard uplink
+is unaffected**: it runs over the gateway's own Wi-Fi, not over this cable, so
+the mesh can be on the cloud and on this wall at the same time — measured here
+over 92 s of polling every 3 s, the gateway posted three more times and every
+one was acknowledged. The wall has no write path at all: it cannot change the
+thing it is demonstrating.
 
 ## Commands
 
@@ -60,6 +86,7 @@ Run against two BFi91XTD kits on the bench (gateway firmware 0.6.2, stack Rev 1.
 - All eight `sys --reset` variants, including a 5340 factory reset followed by `profile restore`, and a 9151 `modem-factory` after which the gateway re-applied its stored profile and the leaf re-associated on its own.
 - `xtd sh` register reads and writes against the nRF9151 map (`CHIP_ID`, `LONG_RD_ID`, `BOOT_COUNT`/`RESET_CAUSE`, the `GEO_*` block).
 - The dashboard: every `/api/read/<subsystem>` route, a write, MCUboot slot listing, live attitude.
+- The demo wall against a nine-node mesh five hops deep, with the cloud uplink running throughout.
 
 Things the interface does not do, by design of the firmware rather than of this tool:
 

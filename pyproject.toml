@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flsemi-xtd"
-version = "0.1.3"
+version = "0.2.0"
 description = "Local tools for the FLSEMI BFi91XTD DECT NR+ evaluation kit on Nordic Thingy:91 X — dashboard, configuration and firmware update over USB or Bluetooth LE"
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
