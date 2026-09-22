@@ -106,6 +106,40 @@ without this step stops the whole bench at once:
 3. Turn on enforcement in the following release, once the estate reads
    `licensed: true` everywhere.
 
+## Keys
+
+The device holds **two** public keys, current and standby, and accepts a
+licence that either one verifies. This costs 64 octets and one extra
+verification, and it is the only thing that makes rotation possible without
+returning units: a unit shipped trusting one key trusts that key for ever.
+An all-zero slot is skipped. **Decide this before the first production
+image** — it cannot be added to units already in the field.
+
+The development key, for bring-up on bench hardware only:
+
+```
+fingerprint 47cccd5e61a4818144a8baf8b8d50335
+6efdec79d7361edf82302c61b85f5c87d0329aa14bb40dee83d34ac411d5bdec
+522909d4d37d03aa47d7f64c3d9bee659431145aada624b657b360d35ac43bcc
+```
+
+It was generated on a networked laptop inside an agent session. What
+disqualifies it from production is where it was made, not what it is: a key
+whose value equals a product line has to be generated on the machine that will
+keep it. Units flashed with this public key are development hardware.
+
+## Byte order
+
+`device_id` is the two FICR words concatenated as `chipid` prints them,
+`0x1FF0` then `0x1FF4`. The invariant that catches the mistake for free, and
+that belongs in the firmware selftest:
+
+> the last four octets of `device_id` equal that node's long RD id
+
+Verified on all seven bench boards. This matters because the same value is
+rendered both ways in different places — a register hexdump shows the bytes as
+they sit in memory, and the RD id appears everywhere else as a number.
+
 ## Host side
 
 `xtd licence` reads the status, `xtd licence --request` produces the request to
