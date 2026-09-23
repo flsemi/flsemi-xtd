@@ -114,12 +114,12 @@ def main():
     try:
         manifest = json.loads(fetch(args.manifest))
     except Exception as e:
-        sys.exit("xtd update: cannot read the release manifest (%s): %s"
+        sys.exit("flsemi update: cannot read the release manifest (%s): %s"
                  % (args.manifest, e))
 
     art, why = pick(manifest, args.chip, me["image_type"])
     if art is None:
-        sys.exit("xtd update: %s" % why)
+        sys.exit("flsemi update: %s" % why)
 
     have = me["gw_version"] if args.chip == CHIP_5340 else None
     print("published: %s %s  %s  %d B%s"
@@ -140,10 +140,10 @@ def main():
 
     digest = hashlib.sha256(blob).hexdigest()
     if art.get("sha256") and digest != art["sha256"].lower():
-        sys.exit("xtd update: the artifact does not match the manifest digest "
+        sys.exit("flsemi update: the artifact does not match the manifest digest "
                  "(got %s). Nothing was written to the kit." % digest[:16])
     if art.get("size") and len(blob) != art["size"]:
-        sys.exit("xtd update: the artifact is %d B, the manifest says %d. "
+        sys.exit("flsemi update: the artifact is %d B, the manifest says %d. "
                  "Nothing was written to the kit." % (len(blob), art["size"]))
     print("sha256 ok (%s…)" % digest[:16])
 
@@ -160,7 +160,7 @@ def main():
         G.img_test(dev, new[0]["hash"])
         G.os_reset(dev)
         print("marked for test boot and reset. When it is back:\n"
-              "  xtd cfg -d %s dfu --confirm" % dev)
+              "  flsemi cfg -d %s dfu --confirm" % dev)
     else:
         # the 9151 goes through the gateway's serial-recovery proxy; MCUboot
         # on the 9151 is what decrypts it

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 BANFi Semiconductor Co., Ltd.
 # Copyright (c) 2026 FL SEMICONDUCTOR LLC (FLSEMI)
 # SPDX-License-Identifier: BSD-3-Clause
-"""gwcfg.py - talk to the BFi53USB7IP SMP group 64 over USB CDC-ACM.
+"""gwcfg.py - talk to an FLSEMI device's SMP group 64 over USB CDC-ACM or BLE.
 
 mcumgr CLI cannot address custom groups; this speaks raw SMP-over-serial
 (the same console framing mcumgr uses: 0x06 0x09 marker + base64 + CRC16).
@@ -130,7 +130,7 @@ async def _ble_connect(want: str):
             "no device advertising a name containing *%s*.\n"
             "  advertising right now: %s\n"
             "  A gateway advertises as BFi53-<rd id>, and only while its window "
-            "is open -- `xtd cfg -d <usb port> ble --on`, or a double press of "
+            "is open -- `flsemi cfg -d <usb port> ble --on`, or a double press of "
             "Button 2. (Firmware before 2026-09 advertised the gateway project's "
             "name instead, which is identical on every board: match on the rd id.)"
             % (want, ", ".join(seen) if seen else "(nothing with a name)"))
@@ -252,21 +252,54 @@ def candidate_ports():
     return out
 
 
+PRODUCTS = {
+    "xtd": "BFi91XTD DECT NR+ kit",
+    "er0": "BFi53ER0 EdgeBox",
+}
+
+
 def probe(dev: str):
-    """What is on this port, or None. A gateway answers SMP; its shell does
-    not, which is the only difference a host can see from the outside."""
+    """What is on this port, or None.
+
+    The device says what it is; nothing here is inferred from the command line.
+    Firmware from 2026-09 onward reports `product` in its status, and older
+    gateways do not -- for those, answering the DECT read at all is the
+    identification, because only the DECT kit has one.
+
+    A device that answers SMP is a device; its diagnostic shell port does not
+    answer, which is the only difference a host can see from the outside.
+    """
     try:
         st = command(dev, OP_READ, ID_STATUS, {}, timeout=1.5)
         chip = command(dev, OP_READ, ID_CHIPID, {}, timeout=1.5)
-        dect = command(dev, OP_READ, ID_DECT, {}, timeout=1.5)
     except Exception:
         return None
-    return {"dev": dev, "ver": st.get("ver", "?"),
+
+    product = st.get("product")
+    info = {"dev": dev, "ver": st.get("ver", "?"),
             "dev_id": chip.get("dev_id", ""),
+            "product": product}
+
+    if product in (None, "xtd"):
+        try:
+            dect = command(dev, OP_READ, ID_DECT, {}, timeout=1.5)
+        except Exception:
+            if product is None:
+                # Answers SMP, carries no product field and has no DECT: newer
+                # than the field, or a product this build has not met. Say so
+                # rather than guessing at a capability set.
+                info["product"] = "unknown"
+                return info
+            dect = {}
+        info["product"] = "xtd"
+        info.update({
             "rdid": "%08x" % (chip.get("modem_id") or 0),
             "role": {0: "none", 1: "leaf", 2: "relay", 3: "sink"}.get(dect.get("role"), "?"),
             "carrier": dect.get("carrier"), "band": dect.get("band"),
-            "link": dect.get("link", False)}
+            "link": dect.get("link", False),
+        })
+
+    return info
 
 
 def default_dev() -> str:
@@ -612,16 +645,24 @@ def main():
         # this one asks the machine, not a device: -d would be meaningless
         found = [p for p in (probe(d) for d in candidate_ports()) if p]
         if not found:
-            print("no BFi91XTD gateway answered on any serial port.\n"
-                  "Plug the USB-C cable into the kit's own connector (not a "
+            print("no FLSEMI device answered on any serial port.\n"
+                  "Plug the USB-C cable into the device's own connector (not a "
                   "debugger), and on macOS give the tool a moment after plugging in.")
             return 1
-        print("%-24s %-8s %-10s %-7s %s" % ("port", "fw", "rd id", "role", "carrier"))
+        # One row per device, and only the columns that device has: a product
+        # without a DECT radio should not be shown an empty carrier column.
+        print("%-24s %-10s %-8s %s" % ("port", "product", "fw", "detail"))
         for p in found:
-            print("%-24s %-8s %-10s %-7s %s%s"
-                  % (p["dev"], p["ver"], p["rdid"], p["role"],
-                     p["carrier"], "" if p["link"] else "   (9151 not answering)"))
-        print("\nuse one of these with -d, e.g.  xtd cfg -d %s status" % found[0]["dev"])
+            if p.get("product") == "xtd":
+                detail = "rd id %s  role %s  carrier %s%s" % (
+                    p["rdid"], p["role"], p["carrier"],
+                    "" if p["link"] else "   (9151 not answering)")
+            else:
+                detail = "dev id %s" % (p.get("dev_id") or "?")
+            print("%-24s %-10s %-8s %s"
+                  % (p["dev"], PRODUCTS.get(p.get("product"), p.get("product") or "?"),
+                     p["ver"], detail))
+        print("\nuse one of these with -d, e.g.  flsemi cfg -d %s status" % found[0]["dev"])
         return 0
 
     dev = args.dev or default_dev()
@@ -931,7 +972,7 @@ def main():
             # guess it. Hand back the exact string the next command wants.
             if r.get("advertising") and r.get("name"):
                 print("\nnow reachable without the cable:\n"
-                      "  xtd cfg -d ble:%s status        (%s s of window)"
+                      "  flsemi cfg -d ble:%s status        (%s s of window)"
                       % (r["name"], r.get("window_left_s", secs)))
         else:
             print(command(dev, OP_READ, ID_BLE, {}))
@@ -1036,7 +1077,9 @@ def main():
         r = command(dev, OP_READ, ID_WIFI_IP, {})
         print(r)
         if not r.get("ipv4_supported", False):
-            print("IPv6 only (SLAAC over Wi-Fi); no addressing to configure")
+            # The device's answer, not a policy of this tool: some FLSEMI
+            # products ship an IPv6-only image and some are dual stack.
+            print("this device has no IPv4 stack; IPv6 by SLAAC, nothing to configure")
     elif args.cmd == "adv":
         if args.ps is None and args.reg is None:
             print(command(dev, OP_READ, ID_WIFI_ADV, {}))

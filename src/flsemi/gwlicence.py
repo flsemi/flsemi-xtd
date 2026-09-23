@@ -127,7 +127,7 @@ def main():
             "rd_id": me["rd_id"],
         }
         if not req["device_id"]:
-            sys.exit("xtd licence: this unit does not report a %s device id; "
+            sys.exit("flsemi licence: this unit does not report a %s device id; "
                      "a licence cannot be bound without it" % args.chip)
         out = json.dumps(req, indent=2)
         if args.request == "-":
@@ -143,7 +143,7 @@ def main():
         lic = parse(blob)          # refuse a malformed file before the device sees it
         want = me["nrf9151_device_id"] if lic["chip"] == 1 else me["nrf5340_device_id"]
         if want and lic["device_id"].lower() != want.lower():
-            sys.exit("xtd licence: this licence is for %s %s, and this unit is %s.\n"
+            sys.exit("flsemi licence: this licence is for %s %s, and this unit is %s.\n"
                      "A licence is bound to the die and cannot be moved."
                      % (lic["chip_name"], lic["device_id"], want))
         if lic["expires"] and lic["expires"] < time.time():
@@ -154,7 +154,7 @@ def main():
             r = G.command(dev, G.OP_WRITE, ID_LICENCE, {"blob": blob}, timeout=10.0)
         except RuntimeError as e:
             if "rc=8" in str(e):
-                sys.exit("xtd licence: this unit's firmware does not serve the "
+                sys.exit("flsemi licence: this unit's firmware does not serve the "
                          "licence endpoint yet (see doc/licence-format.md)")
             raise
         print(r)

@@ -16,7 +16,7 @@ manufacturing process. It is a design note, not a shipped feature.
 |---|---|---|---|
 | **P1** | someone else's firmware running on our hardware | MCUboot image signature with **our own key**, plus APPROTECT | **absent** — both bootloaders use the MCUboot/NCS default development key (no `CONFIG_BOOT_SIGNATURE_KEY_FILE` in either project) |
 | **P2** | our firmware running on hardware we did not sell | MCUboot **encrypted images**, key held only by devices we provisioned | absent — `CONFIG_BOOT_ENCRYPT_IMAGE=n` |
-| **P3** | our firmware running on a unit we did not licence | licence blob signed over the FICR DEVICEID, checked in the secure image | **format fixed, host side done** (doc/licence-format.md, `xtd licence`); the on-chip check is the firmware work |
+| **P3** | our firmware running on a unit we did not licence | licence blob signed over the FICR DEVICEID, checked in the secure image | **format fixed, host side done** (doc/licence-format.md, `flsemi licence`); the on-chip check is the firmware work |
 
 **Why P3 and not P2 as the primary.** P2's private key sits in every unit we
 ship: one extraction ends the protection for the whole product line,
@@ -106,8 +106,8 @@ ever shipped on it. Two things follow, and neither is optional:
   line — under this decision, that is exactly what it does.
 - The rotation point and the leak response, decided before the first release.
 
-**flsemi-xtd (this repository)**
-- `xtd update`: read the device, fetch the manifest, pick the artifact that
+**flsemi (this repository)**
+- `flsemi update`: read the device, fetch the manifest, pick the artifact that
   matches, verify its digest, upload it through the existing paths. It never
   decrypts, so it is finished before the firmware work starts and does not
   change when that work lands.
@@ -147,7 +147,7 @@ One JSON file per release, published beside the artifacts.
 `image_type` is the stamp field that already distinguishes a Thingy:91 X image
 from an nRF9151 DK image, so a customer cannot install the wrong one by hand —
 and under one key per product line it is also what selects the artifact whose
-key the kit holds. `xtd update` takes the artifact matching the chip and that
+key the kit holds. `flsemi update` takes the artifact matching the chip and that
 type, and refuses rather than choosing when a release offers more than one.
 
 ## Releasing
@@ -158,7 +158,7 @@ and this repository's part is only the manifest and the artifact naming above.
 `releases/` is empty on purpose: a published image before P1 and the licence
 check are in place would be a published image with nothing behind it.
 
-The tool does not need the process to change: `xtd update` verifies a digest
+The tool does not need the process to change: `flsemi update` verifies a digest
 and uploads bytes, which is the same job whatever the process decides about
 signing, encryption and who may download.
 

@@ -10,7 +10,7 @@ so the mesh can be on ThingsBoard and on this wall at the same time.
 
 Read-only by construction -- there is no write path in this file. A demo
 that can reconfigure the thing being demonstrated is a demo that ends
-badly, and `xtd cfg` is one terminal away when a change is wanted.
+badly, and `flsemi cfg` is one terminal away when a change is wanted.
 """
 import argparse
 import json
@@ -376,7 +376,7 @@ def main():
     try:
         poll_once(dev, names)      # fail loudly here, not in a browser tab
     except Exception as e:
-        sys.exit("xtd stage: %s" % e)
+        sys.exit("flsemi stage: %s" % e)
 
     threading.Thread(target=poller, args=(dev, names, args.interval),
                      daemon=True).start()

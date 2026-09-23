@@ -142,9 +142,9 @@ they sit in memory, and the RD id appears everywhere else as a number.
 
 ## Host side
 
-`xtd licence` reads the status, `xtd licence --request` produces the request to
+`flsemi licence` reads the status, `flsemi licence --request` produces the request to
 send us (it carries the device ids and the image type, nothing secret), and
-`xtd licence install <file>` writes the blob. The tool never signs: issuing is
+`flsemi licence install <file>` writes the blob. The tool never signs: issuing is
 a process on our side, on the machine that holds the key.
 
 **Firmware contract** — two tiers, because the licence belongs to the nRF9151

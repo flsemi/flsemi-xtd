@@ -1,27 +1,41 @@
-# flsemi-xtd
+# flsemi
 
-Local tools for the **FLSEMI BFi91XTD** DECT NR+ evaluation kit — a Nordic Thingy:91 X running FLSEMI's own DECT NR+ stack (BFi91NR7DLCVG on the nRF9151) and gateway firmware (BFi53USB7IP on the nRF5340).
+Local tools for **FLSEMI devices** — dashboard, configuration and firmware update over USB or Bluetooth LE.
 
 Everything runs on the machine with the cable or the Bluetooth radio. Nothing here talks to any FLSEMI server: every value on screen came off the wire from the device in front of you.
 
-**The kit is IPv6-only.** The gateway's Wi-Fi uplink, the ThingsBoard CoAP client, the WireGuard tunnel and the mesh border router all run on IPv6 (per TS 103 874-3); there is no IPv4 stack in the shipped image. Your Wi-Fi network needs router advertisements (SLAAC) and, for the cloud uplink, an IPv6 route out.
+**No command names a product.** The device on the port says what it is, and the tool asks it: `flsemi cfg devices` lists what is attached and what each one is, and `flsemi update` picks an artifact by the image type the device reports rather than by anything a human typed. Asking you to name the product as well would only add a second answer that can disagree with the first.
+
+| product | what it is |
+|---|---|
+| **BFi91XTD** | DECT NR+ evaluation kit — a Nordic Thingy:91 X running FLSEMI's DECT NR+ stack (BFi91NR7DLCVG on the nRF9151) and gateway firmware (BFi53USB7IP on the nRF5340) |
+| **BFi53ER0** | EdgeBox IoT gateway — EnOcean capture over Bluetooth LE, Ethernet uplink |
+
+Addressing differs by product and the tool reports what the device has rather than asserting one: the BFi91XTD kit ships an **IPv6-only** image (Wi-Fi uplink, ThingsBoard CoAP client, WireGuard tunnel and mesh border router all on IPv6, per TS 103 874-3), so its Wi-Fi network needs router advertisements (SLAAC) and, for the cloud uplink, an IPv6 route out.
 
 ```
-pip install flsemi-xtd          # or: uvx flsemi-xtd
+pip install flsemi             # or: uvx flsemi
 
-xtd stage -d PORT               # local demo wall at http://127.0.0.1:8770 (read-only)
-xtd ui -d PORT                  # local dashboard at http://127.0.0.1:8765 (read-only)
-xtd ui -d PORT --allow-write    # ... with configuration writes enabled
-xtd cfg -d PORT status          # role, carrier, association, uptime
-xtd cfg -d PORT dect --help     # band / carrier / role / network ID
-xtd cfg -d PORT dfu   gateway.bin   # nRF5340 firmware over USB (MCUboot image management)
-xtd cfg -d PORT dfu91 stack.bin     # nRF9151 firmware through the gateway's serial-recovery proxy
-xtd cfg -d PORT ota   stack.bin     # put an nRF9151 image in the sink's store — the mesh distributes it
-xtd profile -d PORT dump -o before.json   # whole-device settings (secrets stay write-only)
-xtd sh -d SHELLPORT 'hif r 0x0024 4'      # raw nRF9151 host-interface register access
+flsemi cfg devices                 # what is attached, and what each one is
+flsemi stage -d PORT               # local demo wall at http://127.0.0.1:8770 (read-only)
+flsemi ui -d PORT                  # local dashboard at http://127.0.0.1:8765 (read-only)
+flsemi ui -d PORT --allow-write    # ... with configuration writes enabled
+flsemi cfg -d PORT status          # what this device is and how it is doing
+flsemi cfg -d PORT --help          # the subcommands this device has
+flsemi profile -d PORT dump -o before.json   # whole-device settings (secrets stay write-only)
 ```
 
-Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn` on Windows — `xtd cfg devices` lists what is attached) or `-d ble:<rd id>` once the device has opened its Bluetooth window (`ble --on` over USB, or a double press of Button 2). A gateway advertises as `BFi53-<rd id>`, and `-d ble:` matches any part of that, so the RD id alone is enough. Give the RD id rather than the whole name: firmware before 2026-09 advertised the gateway project's name, which is the same string on every board and so cannot tell two kits apart. `-d` may go before or after the subcommand. On macOS run from Terminal.app so the Bluetooth permission prompt can appear. `xtd sh` is the one command that uses the *second* CDC port (the diagnostic shell, `...XXXX3`).
+BFi91XTD only:
+
+```
+flsemi cfg -d PORT dect --help     # band / carrier / role / network ID
+flsemi cfg -d PORT dfu   gateway.bin   # nRF5340 firmware over USB (MCUboot image management)
+flsemi cfg -d PORT dfu91 stack.bin     # nRF9151 firmware through the gateway's serial-recovery proxy
+flsemi cfg -d PORT ota   stack.bin     # put an nRF9151 image in the sink's store — the mesh distributes it
+flsemi sh -d SHELLPORT 'hif r 0x0024 4'   # raw nRF9151 host-interface register access
+```
+
+Transport for every command: `-d /dev/cu.usbmodemXXXX1` (the SMP CDC port; `COMn` on Windows — `flsemi cfg devices` lists what is attached) or `-d ble:<rd id>` once the device has opened its Bluetooth window (`ble --on` over USB, or a double press of Button 2). A gateway advertises as `BFi53-<rd id>`, and `-d ble:` matches any part of that, so the RD id alone is enough. Give the RD id rather than the whole name: firmware before 2026-09 advertised the gateway project's name, which is the same string on every board and so cannot tell two kits apart. `-d` may go before or after the subcommand. On macOS run from Terminal.app so the Bluetooth permission prompt can appear. `flsemi sh` is the one command that uses the *second* CDC port (the diagnostic shell, `...XXXX3`).
 
 ## Licensing a unit
 
@@ -31,27 +45,27 @@ another unit. The device holds only a public key; nothing secret is shipped in
 the hardware.
 
 ```
-xtd licence -d PORT                      # what this unit carries
-xtd licence -d PORT --request unit.json  # the request to send us (carries no secret)
-xtd licence -d PORT --install unit.flic  # install what comes back
-xtd licence --show unit.flic             # read a licence file, no device needed
+flsemi licence -d PORT                      # what this unit carries
+flsemi licence -d PORT --request unit.json  # the request to send us (carries no secret)
+flsemi licence -d PORT --install unit.flic  # install what comes back
+flsemi licence --show unit.flic             # read a licence file, no device needed
 ```
 
 The format is published in [doc/licence-format.md](doc/licence-format.md) — the
 security is in the key, not in the structure. **The on-chip check is not
-implemented yet**; until it is, `xtd licence` says so rather than implying a
+implemented yet**; until it is, `flsemi licence` says so rather than implying a
 unit is protected.
 
 ## Updating a kit from a published release
 
 ```
-xtd update -d PORT              # the gateway's nRF5340
-xtd update -d PORT --chip nrf9151 -n     # what would be installed, without installing it
+flsemi update -d PORT              # the gateway's nRF5340
+flsemi update -d PORT --chip nrf9151 -n     # what would be installed, without installing it
 ```
 
-`xtd update` reads what the kit is — the board image type it reports — fetches
+`flsemi update` reads what the kit is — the board image type it reports — fetches
 the release manifest, takes only the artifact published for that board, checks
-its SHA-256, and uploads it through the same paths `xtd cfg dfu` / `dfu91` use.
+its SHA-256, and uploads it through the same paths `flsemi cfg dfu` / `dfu91` use.
 It installs nothing if the digest or the size disagrees with the manifest, and
 it refuses rather than choosing when a release offers more than one candidate.
 
@@ -64,14 +78,14 @@ implemented today, is in [doc/firmware-distribution.md](doc/firmware-distributio
 
 ## The demo wall
 
-`xtd stage` is a presentation view of a running mesh: the topology each node
+`flsemi stage` is a presentation view of a running mesh: the topology each node
 reports (who it is attached to, how deep, when it was last heard) beside a live
 card per node with its temperature, humidity, air quality and battery.
 
 ![The demo wall: a nine-node mesh five hops deep, with a live card per node](doc/stage.png)
 
 ```
-xtd stage -d /dev/cu.usbmodemXXXX1 --site "Building A" --names names.json
+flsemi stage -d /dev/cu.usbmodemXXXX1 --site "Building A" --names names.json
 ```
 
 `names.json` gives the nodes the names the room knows them by, which is what a
@@ -91,7 +105,7 @@ thing it is demonstrating.
 
 ## Commands
 
-| `xtd cfg ...` | Group 64 id | What it does |
+| `flsemi cfg ...` | Group 64 id | What it does |
 |---|---|---|
 | `status` | 0 | firmware version, SPI link to the nRF9151, USB audio, Wi-Fi association |
 | `wifi` / `scan` / `ip` / `adv` | 1 / 2 / 11 / 12 | credentials and radio switch, site survey, the IPv6 address in use, power-save and country |
@@ -116,11 +130,11 @@ thing it is demonstrating.
 | `ble` | 28 | Bluetooth configuration window: `--on`, `--off`, `--unpair` |
 | `dfu` | group 1 | this gateway's nRF5340: upload, `--test --reset`, `--confirm` |
 
-Every id the gateway firmware serves (0.6.2) has a command here; the dashboard (`xtd ui`) exposes the same set as panels, one per URL fragment (`#dect`, `#cloud`, …), with every field annotated:
+Every id the gateway firmware serves (0.6.2) has a command here; the dashboard (`flsemi ui`) exposes the same set as panels, one per URL fragment (`#dect`, `#cloud`, …), with every field annotated:
 
 ![The configuration dashboard on the DECT panel](doc/dashboard.png)
 
- `xtd profile dump/diff/restore` round-trips the settable subset of all of them, and `xtd profile site` snapshots the mesh as it is (plan, who is attached to whom, health).
+ `flsemi profile dump/diff/restore` round-trips the settable subset of all of them, and `flsemi profile site` snapshots the mesh as it is (plan, who is attached to whom, health).
 
 ## Verified on hardware
 
@@ -129,7 +143,7 @@ Run against two BFi91XTD kits on the bench (gateway firmware 0.6.2, stack Rev 1.
 - Every read command on both kits; every write command on the leaf with read-back and restore.
 - `dfu` (816 KB nRF5340 image, 36 s), `dfu91` (450 KB nRF9151 image over serial recovery, 80 s, the leaf back on the tree with its profile intact), `ota` (445 KB into the store at 16 KiB/s, sha256 matching).
 - All eight `sys --reset` variants, including a 5340 factory reset followed by `profile restore`, and a 9151 `modem-factory` after which the gateway re-applied its stored profile and the leaf re-associated on its own.
-- `xtd sh` register reads and writes against the nRF9151 map (`CHIP_ID`, `LONG_RD_ID`, `BOOT_COUNT`/`RESET_CAUSE`, the `GEO_*` block).
+- `flsemi sh` register reads and writes against the nRF9151 map (`CHIP_ID`, `LONG_RD_ID`, `BOOT_COUNT`/`RESET_CAUSE`, the `GEO_*` block).
 - The dashboard: every `/api/read/<subsystem>` route, a write, MCUboot slot listing, live attitude.
 - The demo wall against a nine-node mesh five hops deep, with the cloud uplink running throughout.
 
