@@ -43,7 +43,7 @@ customer's hands. Obfuscation changes who bothers, not who can.
 The only arrangement that survives publication is: **the ciphertext is
 public, the key is in the device, and nothing on the host ever holds the
 plaintext.** MCUboot decrypts in the bootloader, on-chip, during the swap.
-`xtd` moves bytes it cannot read.
+`flsemi` moves bytes it cannot read.
 
 That is what makes a public GitHub release acceptable: to anyone without
 one of our boards, the artifact is inert.

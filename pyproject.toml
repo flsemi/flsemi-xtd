@@ -25,7 +25,7 @@ dependencies = ["pyserial>=3.5", "cbor2>=5.4", "bleak>=0.21"]
 
 [project.urls]
 Homepage = "https://flsemi.us"
-Source = "https://github.com/flsemi/flsemi-xtd"
+Source = "https://github.com/flsemi/flsemi"
 
 [project.scripts]
 flsemi = "flsemi.cli:main"

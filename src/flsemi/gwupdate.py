@@ -25,7 +25,7 @@ from . import gwcfg as G
 
 # Where releases are published. Nothing is there yet: publishing images before
 # the encryption and signing work lands would be publishing the firmware.
-MANIFEST_URL = "https://raw.githubusercontent.com/flsemi/flsemi-xtd/main/releases/manifest.json"
+MANIFEST_URL = "https://raw.githubusercontent.com/flsemi/flsemi/main/releases/manifest.json"
 
 CHIP_5340, CHIP_9151 = "nrf5340", "nrf9151"
 

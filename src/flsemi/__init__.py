@@ -1,7 +1,7 @@
 # Copyright (c) 2026 BANFi Semiconductor Co., Ltd.
 # Copyright (c) 2026 FL SEMICONDUCTOR LLC (FLSEMI)
 # SPDX-License-Identifier: BSD-3-Clause
-"""flsemi-xtd — local tools for the BFi91XTD DECT NR+ evaluation kit (Nordic Thingy:91 X).
+"""flsemi — local tools for the BFi91XTD DECT NR+ evaluation kit (Nordic Thingy:91 X).
 
     flsemi ui        local browser dashboard, read-only unless --allow-write
     flsemi cfg ...   configuration plane over USB CDC or Bluetooth LE (-d ble:<rdid>)
