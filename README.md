@@ -30,7 +30,7 @@ BFi91XTD only:
 ```
 flsemi cfg -d PORT dect --help     # band / carrier / role / network ID
 flsemi cfg -d PORT dfu   gateway.bin   # nRF5340 firmware over USB (MCUboot image management)
-flsemi cfg -d PORT dfu91 stack.bin     # nRF9151 firmware through the gateway's serial-recovery proxy
+flsemi cfg -d PORT dfu91 stack.bin     # nRF9151 application firmware through the gateway's serial-recovery proxy
 flsemi cfg -d PORT ota   stack.bin     # put an nRF9151 image in the sink's store — the mesh distributes it
 flsemi sh -d SHELLPORT 'hif r 0x0024 4'   # raw nRF9151 host-interface register access
 ```
@@ -109,28 +109,29 @@ thing it is demonstrating.
 |---|---|---|
 | `status` | 0 | firmware version, SPI link to the nRF9151, USB audio, Wi-Fi association |
 | `wifi` / `scan` / `ip` / `adv` | 1 / 2 / 11 / 12 | credentials and radio switch, site survey, the IPv6 address in use, power-save and country |
-| `dect` | 3 | network id, carrier/band, parent pin, sink flag, autostart, report period, role, hop limit; `--apply`, `--snapshot` |
+| `dect` | 3 | network id, carrier/band, parent pin, sink flag, autostart, report period, role, hop limit, `--topology mesh\|star`; `--apply`, `--snapshot` |
 | `sec` | 5 | DECT NR+ MAC security: master key (write-only), `--require` |
 | `usb` | 7 | USB Audio (UAC2) on/off |
-| `dfu91` | 8 | nRF9151 image via the gateway's MCUboot serial-recovery proxy |
+| `dfu91` | 8 | nRF9151 application image via the gateway's MCUboot serial-recovery proxy (the modem firmware is not updated this way) |
 | `sys` | 9 | version/uptime; `--reset warm\|cold\|factory\|modem\|wifi\|wifi-creds\|modem-stack\|modem-factory` |
 | `sense` | 15 | latest sample per node; `--temp-offset` |
-| `cloud` | 16 | ThingsBoard CoAP uplink: host, port, token, interval, DTLS, per-node tokens (`--ntoken <rd id>:` with nothing after the colon removes one), proxy exclusions |
+| `cloud` | 16 | ThingsBoard CoAP uplink: host, port, token, interval, DTLS, per-node tokens (`--ntoken <rd id>:` with nothing after the colon removes one), proxy exclusions, `--refresh` (re-post everything now) |
 | `hif` | 17 | park the SPI host interface so another host can own the nRF9151 |
 | `led` | 18 | air-quality indicator (LED2) and the nRF9151's LED1 |
 | `radio` | 19 | MCS, TX power, chain mode, cluster-beacon period, scan timeout |
 | `plan` | 20 | CDC site plan (TS 103 636-5 Annex C): read, `--raw`, `--lock`, apply from file |
 | `br` | 21 | IPv6 border router prefix and enable |
 | `vpn` | 22 | WireGuard tunnel parameters |
-| `geo` | 23 | installation position and height (stored in the nRF9151) |
+| `geo` | 23 | installation position and height (stored in the nRF9151); `--clear` |
 | `motion` | 24 | attitude from the on-board IMU and magnetometer |
 | `chipid` | 25 | FICR device ids of both processors (licence binding) |
 | `inventory` | 26 | every part on the board that can say who it is |
 | `ota` | 27 | node image store: upload, `--clear`, `--client`, `--apply`, `--board` |
 | `ble` | 28 | Bluetooth configuration window: `--on`, `--off`, `--unpair` |
+| `app` | 29 | application data: `--dst <rd id>\|0 --text\|--hex` sends, no option reads what arrived |
 | `dfu` | group 1 | this gateway's nRF5340: upload, `--test --reset`, `--confirm` |
 
-Every id the gateway firmware serves (0.6.2) has a command here; the dashboard (`flsemi ui`) exposes the same set as panels, one per URL fragment (`#dect`, `#cloud`, …), with every field annotated:
+Every id the gateway firmware serves (0.6.62) has a command here; the dashboard (`flsemi ui`) exposes the same set as panels, one per URL fragment (`#dect`, `#cloud`, …), with every field annotated:
 
 ![The configuration dashboard on the DECT panel](doc/dashboard.png)
 

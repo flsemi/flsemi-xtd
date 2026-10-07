@@ -22,7 +22,7 @@ import time
 
 from . import gwcfg as G
 
-ID_LICENCE = 29          # proposed; see doc/licence-format.md
+ID_LICENCE = 30          # proposed (29 is APP since gateway 0.6.9); see doc/licence-format.md
 
 MAGIC = 0x464C4943       # 'FLIC'
 VERSION = 1

@@ -48,6 +48,7 @@ ID_CHIPID = 25
 ID_INVENTORY = 26
 ID_OTA = 27
 ID_BLE = 28
+ID_APP = 29
 
 OP_READ = 0
 OP_WRITE = 2
@@ -425,7 +426,7 @@ def main():
     usb.add_argument("--audio", choices=["on", "off"], default=None)
     wifi = sub.add_parser("wifi")
     wifi.add_argument("--ssid", default=None)
-    wifi.add_argument("--psk", default="")
+    wifi.add_argument("--psk", default=None, help="omit to keep the stored PSK")
     wifi.add_argument("--sec", choices=["auto", "open", "wpa2", "wpa3"],
                       default="auto")
     wifi.add_argument("--band", choices=["any", "2.4", "5"], default="any")
@@ -455,6 +456,9 @@ def main():
                     help="pin this non-sink to one parent (long RD id, e.g. 0x06aa8c8f; 0 = any). "
                          "Kept by the gateway and re-asserted after every 9151 boot")
     de.add_argument("--sink", choices=["on", "off"], default=None)
+    de.add_argument("--topology", choices=["mesh", "star"], default=None,
+                    help="network shape (gateway 0.6.9+): star = a sink profile is the hub (FT, no "
+                         "relaying), a non-sink profile is a member. Stored; add --apply to use it now")
     de.add_argument("--autostart", choices=["on", "off"], default=None)
     de.add_argument("--sense", type=int, default=None, help="non-sink report period, s (0 = host leaves SENSE_* alone)")
     de.add_argument("--role", choices=["none", "leaf", "relay", "sink"], default=None,
@@ -472,7 +476,9 @@ def main():
                          "boot profile (AUTOSTART=1), so the value survives its own resets")
     df = sub.add_parser("dfu91", help="stage an nRF9151 image in the shared external NOR")
     df.add_argument("image", nargs="?", default=None, help="file to send (omit to read state)")
-    df.add_argument("--target", choices=["app", "modem"], default="app")
+    df.add_argument("--target", choices=["app"], default="app",
+                    help="the nRF9151 application image. Modem firmware is not updated this way "
+                         "(the gateway refuses it); see the setup guide")
     df.add_argument("--chunk", type=int, default=896,
                     help="payload bytes per SMP write (896 measured at 8.0 KiB/s; 128 was 1.9)")
     df.add_argument("--baud", type=int, default=0,
@@ -533,6 +539,13 @@ def main():
                      help="this gateway's 9151 image type: thingy | dk | 0x<md5 first 32 bits> -- the "
                           "QUERY names it and only an INFO of that type is pulled (a124c653)")
 
+    app = sub.add_parser("app", help="application data on EP 0x2075 (gateway 0.6.9+): send to a node "
+                                      "or to the backend, read what arrived")
+    app.add_argument("--dst", default="0", help="Long RD ID (0x...), 0 = the backend: the sink in a "
+                                               "mesh, the hub in a star")
+    g = app.add_mutually_exclusive_group()
+    g.add_argument("--text", default=None, help="send this text")
+    g.add_argument("--hex", default=None, help="send these bytes, hex")
     ble = sub.add_parser("ble", help="BLE configuration window: SMP over GATT (gwcfg + DFU) and the "
                                       "shell over NUS for a phone; off by default")
     ble.add_argument("--on", action="store_true", help="open (or re-arm) the window: advertise as BFi53-<rd id>")
@@ -592,6 +605,8 @@ def main():
 
     geo = sub.add_parser("geo", help="installation position and height (9151 NVS, "
                                      "survives reboots; never used on the air)")
+    geo.add_argument("--clear", action="store_true",
+                     help="erase the position record (back to NOT SET)")
     geo.add_argument("--lat", default=None,
                      help="latitude in decimal degrees, WGS-84, north positive (e.g. 25.0478)")
     geo.add_argument("--lon", default=None,
@@ -629,6 +644,8 @@ def main():
     cl.add_argument("--port", type=int, default=None)
     cl.add_argument("--token", default=None, help="device access token; '' forgets it")
     cl.add_argument("--interval", type=int, default=None)
+    cl.add_argument("--refresh", action="store_true",
+                    help="re-post everything now: gateway attributes, every node's attributes and latest sample")
     cl.add_argument("--dtls", choices=["on", "off"], default=None, help="CoAP over DTLS 1.2 (5684) to ThingsBoard")
     cl.add_argument("--noproxy", metavar="RDIDHEX[:0]", default=None, help="stop relaying this node (it terminates its own DTLS); RDID:0 resumes")
     cl.add_argument("--pkey", default=None, help="TB device-profile provision key")
@@ -686,14 +703,15 @@ def main():
             sec = {"auto": 0, "open": 1, "wpa2": 2, "wpa3": 3}[args.sec]
             band = {"any": 0, "2.4": 1, "5": 2}[args.band]
             print(command(dev, OP_WRITE, ID_WIFI_CFG,
-                          {"ssid": args.ssid, "psk": args.psk,
-                           "sec": sec, "band": band,
-                           "enable": True}))
+                          dict({"ssid": args.ssid, "sec": sec, "band": band, "enable": True},
+                               **({"psk": args.psk} if args.psk is not None else {}))))
     elif args.cmd == "sys":
         if args.reset:
             print(command(dev, OP_WRITE, ID_SYS, {"reset": args.reset}))
         else:
             print(command(dev, OP_READ, ID_SYS, {}))
+    elif args.cmd == "cloud" and args.refresh:
+        print(command(dev, OP_WRITE, ID_CLOUD, {"refresh": True}))
     elif args.cmd == "cloud" and args.noproxy:
         rd, _, flag = args.noproxy.partition(":")
         print(command(dev, OP_WRITE, ID_CLOUD, {"noproxy": int(rd, 16), "noproxy_on": 0 if flag == "0" else 1}))
@@ -864,6 +882,8 @@ def main():
             req["autostart"] = args.autostart == "on"
         if args.sense is not None:
             req["sense"] = args.sense
+        if args.topology is not None:
+            req["topology"] = {"mesh": 0, "star": 1}[args.topology]
         if args.role is not None:
             req["role"] = {"none": 0, "leaf": 1, "relay": 2, "sink": 3}[args.role]
             req["role_carrier"] = args.role_carrier
@@ -882,7 +902,7 @@ def main():
             print(command(dev, OP_READ, ID_DFU91, {}))
         else:
             blob = open(args.image, "rb").read()
-            tgt = {"app": 0, "modem": 1}[args.target]
+            tgt = 0  # application image; the modem target is refused by the gateway
             print(dfu91_upload(dev, blob, tgt, args.chunk, args.baud, _progress_stderr))
             sys.stderr.write("\n")
     elif args.cmd == "ota":
@@ -958,6 +978,18 @@ def main():
             if args.reset:
                 os_reset(dev)
                 print("reset sent; confirm with `dfu --confirm` once it is back (over USB, or a new window)")
+    elif args.cmd == "app":
+        if args.text is None and args.hex is None:
+            r = command(dev, OP_READ, ID_APP, {})
+            for m in r.get("rx", []):
+                d = m["data"]
+                txt = d.decode("utf-8", "replace") if all(32 <= b < 127 for b in d) else None
+                print(f"from {m['src']:08x}, {m['age_ms']} ms ago, {len(d)} B: {d.hex()}"
+                      + (f"  ({txt!r})" if txt else ""))
+            print({k: v for k, v in r.items() if k != "rx"})
+        else:
+            data = args.text.encode() if args.text is not None else bytes.fromhex(args.hex)
+            print(command(dev, OP_WRITE, ID_APP, {"dst": int(args.dst, 0), "data": data}))
     elif args.cmd == "ble":
         if args.unpair:
             print(command(dev, OP_WRITE, ID_BLE, {"unpair": True}))
@@ -982,7 +1014,7 @@ def main():
         else:
             print(command(dev, OP_WRITE, ID_HIF, {"suspend": args.suspend}, timeout=10.0))
     elif args.cmd == "geo":
-        req = {}
+        req = {"clear": True} if args.clear else {}
         # 1e-7 degrees, the register's unit: about 11 mm at the equator, so
         # the rounding is far below any accuracy this will ever be given.
         if args.lat is not None:

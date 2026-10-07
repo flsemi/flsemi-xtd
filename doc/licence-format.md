@@ -153,7 +153,7 @@ and the configuration plane belongs to the nRF5340:
 - **nRF9151, host-interface registers** — the blob is written here and the
   status is read here. This is the only verifier: one blob, one implementation
   of the check, whichever way the bytes arrived.
-- **nRF5340, `gwcfg` id 29 `LICENCE`** — a forwarding layer, nothing more.
+- **nRF5340, `gwcfg` id 30 `LICENCE`** (proposed; id 29 is `APP` since gateway 0.6.9) — a forwarding layer, nothing more.
   - read → the fields it read from the nRF9151:
     `{licensed, chip, device_id, product_line, issued, expires, order, reason}`
   - write → `{blob: <112 octets>}` passed down verbatim, answering the same
